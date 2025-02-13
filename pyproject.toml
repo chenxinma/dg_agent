@@ -1,0 +1,4 @@
+[tool.logfire]
+project_name="DG Agent"
+console_colors="never"
+ignore_no_config=true
