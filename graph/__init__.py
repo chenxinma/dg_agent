@@ -1,7 +1,11 @@
+"""
+graph模块用户生成图数据库的内容
+"""
 import hashlib
+from bot.settings import settings
 
-GRAPH_NAME = "fsg_model"
-DSN = "host=172.16.149.14 port=32718 dbname=postgres user=admin password=pass1234"
+GRAPH_NAME = settings.get_setting("age")["graph"]
+DSN = settings.get_setting("age")["dsn"]
 
 class ConceptModel:
     def __init__(self, id, name, x, y, w, h):
