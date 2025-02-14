@@ -8,6 +8,7 @@ from annotated_types import MinLen
 from typing_extensions import TypeAlias
 
 from bot.settings import settings
+from .metadata import AGEVertex
 
 
 GRAPH_NAME = settings.get_setting("age")["graph"]
@@ -45,24 +46,6 @@ class AgentFactory:
     @staticmethod
     def get_agent() -> Agent:
         pass
-
-class AGEVertex(BaseModel):
-    name: str = Field(description="名称")
-    id: str = Field(description="id")
-    node: str = Field(description="节点类型")
-    
-class Application(AGEVertex):
-    """应用程序"""
-    pass
-
-class Domain(AGEVertex):
-    """业务域"""
-    code: str = Field(description="业务域代码")
-        
- 
-class Entity(AGEVertex):
-    """数据实体"""
-    pass
 
 class DataGovResponse(BaseModel):
     """数据治理相关信息"""

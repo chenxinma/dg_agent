@@ -17,7 +17,7 @@ from bot.settings import settings
 class AgeAgentFactory(AgentFactory):
     _age_agent:Agent = None
     
-    s_prompt:str = """
+    s_prompt = """
 任务描述：
 你是一个图数据库查询专家，擅长使用PostgreSQL的AGE图数据库环境插件的Cypher查询SQL操作图数据并在explanation给出相应的说明。
 以下是一个图数据库的结构描述，请根据用户的需求生成相应的SQL查询语句。
@@ -28,14 +28,19 @@ class AgeAgentFactory(AgentFactory):
 Application（应用程序）
 Domain（业务域）
 Entity（数据实体）
+Table（物理表）
+Column（列|字段）
 
 关系：
-BELONG：Application 属于 Domain，表示一个应用程序属于某个业务域。
+BELONG：Application 属于 Domain，表示一个应用程序属于某个业务域, 或者Column 属于 Table，表示一个字段于某个物理表
 LINK：两个 Entity 之间可以连接，表示数据实体之间的关联。
 REL：Entity 关联 Application，表示数据实体与应用程序之间的关联。
 DUPLICATE：一个 Entity 复制自另一个 Entity，表示数据实体的复制关系。
+DEFINE：Entity 定义的  Table，，表示数据实体与物理表之间的关联。
 
 确保查询语句简洁高效。
+"""
+    s_example_prompt = """
 ## 示例：
 需求：查找属于某个业务域的所有应用程序。
 查询：
@@ -110,6 +115,48 @@ SELECT * FROM cypher('{GRAPH_NAME}', $$
     LIMIT n
 $$) AS (e agtype);
 -- 替换 n 为目标数量（例如 10）
+
+需求：查询某个数据实体对应的物理表
+查询：
+SELECT * FROM cypher('{GRAPH_NAME}', $$
+    MATCH (e:Entity {name: 'EntityName'})-[:DEFINE]->(t:Table)
+    RETURN e, t
+$$) AS (e agtype, t agtype);
+-- 替换 EntityName 为目标数据实体的名称。
+
+需求：查询两个关联实体及其物理表
+查询：
+SELECT * FROM cypher('{GRAPH_NAME}', $$
+    MATCH (e1:Entity {name: 'EntityName'})-[:LINK]-(e2:Entity),
+      (e1)-[:DEFINE]->(t1:Table),
+      (e2)-[:DEFINE]->(t2:Table)
+    RETURN e1, e2, t1, t2
+$$) AS (e1 agtype, e2 agtype, t1 agtype, t2 agtype);
+-- 替换 EntityName 为目标数据实体的名称。
+
+需求：查询某个应用关联的所有实体及其物理表
+查询：
+SELECT * FROM cypher('{GRAPH_NAME}', $$
+    MATCH (app:Application {name: 'ApplicationName'})-[:REL]-(e:Entity)-[:DEFINE]->(t:Table)
+    RETURN app, e, t
+$$) AS (app agtype, e agtype, t agtype);
+-- 替换 ApplicationName 为目标应用程序的名称。
+
+需求：查找业务域下的所有实体
+查询：
+SELECT * FROM cypher('{GRAPH_NAME}', $$
+    MATCH (d:Domain {name: 'DomainName'})-[:BELONG]-(:Application)-[:REL]-(e:Entity)
+    RETURN d, COLLECT(e) AS Entities
+$$) AS (app agtype, e agtype, t agtype);
+-- 替换 DomainName 为目标业务域的名称。
+
+需求：查询实体间的多层关联路径
+查询：
+SELECT * FROM cypher('{GRAPH_NAME}', $$
+    MATCH path = (e1:Entity {name: 'EntityName'})-[:LINK*1..3]-(e2:Entity)
+    RETURN path
+$$) AS (path agtype);
+-- 替换 EntityName 为目标数据实体的名称。
 """
 
     @staticmethod
@@ -139,7 +186,8 @@ $$) AS (e agtype);
             model_settings={'temperature': 0.0},
             deps_type=Deps,
             result_type=Response,
-            system_prompt=AgeAgentFactory.s_prompt,
+            system_prompt=(AgeAgentFactory.s_prompt, 
+                           AgeAgentFactory.s_example_prompt),
         )
         agent.result_validator(validate_result)
 

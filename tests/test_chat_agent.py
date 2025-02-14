@@ -34,6 +34,6 @@ async def chat(prompt:str):
             print(to_chat_message(m))
 
 def test_01():
-    prompt = "账单 这个数据实体 连接的数据实体有哪些？"    
+    prompt = "客户账单 这个数据实体 连接的数据实体有哪些？"    
     asyncio.run(chat(prompt))
     
