@@ -161,7 +161,16 @@ $$) AS (path agtype);
 
     @staticmethod
     def get_agent() -> Agent:
-        
+        _mode_setting = settings.get_setting("agents")["age_agent"]
+        agent = Agent(
+            models.infer_model(_mode_setting["model_name"], _mode_setting["api_key"]),
+            model_settings={'temperature': 0.0},
+            deps_type=Deps,
+            result_type=Response,
+            system_prompt=(AgeAgentFactory.s_prompt, 
+                           AgeAgentFactory.s_example_prompt),
+            
+        )
         async def validate_result(ctx: RunContext[Deps], result: Response) -> Response:
             if isinstance(result, InvalidRequest):
                 return result
@@ -175,21 +184,12 @@ $$) AS (path agtype);
                     conn = ctx.deps.create_ag().connection
                     with conn.cursor() as _cursor:
                         _cursor.execute(f'EXPLAIN {q}')
-                except age.exceptions.SqlExecutionError as e:
+                except Exception as e:
                     raise ModelRetry(f'错误查询: {e}') from e
                 else:
                     return result
-        
-        _mode_setting = settings.get_setting("agents")["age_agent"]
-        agent = Agent(
-            models.infer_model(_mode_setting["model_name"], _mode_setting["api_key"]),
-            model_settings={'temperature': 0.0},
-            deps_type=Deps,
-            result_type=Response,
-            system_prompt=(AgeAgentFactory.s_prompt, 
-                           AgeAgentFactory.s_example_prompt),
-        )
         agent.result_validator(validate_result)
+
 
         return agent
             
