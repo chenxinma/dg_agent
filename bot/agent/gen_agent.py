@@ -20,7 +20,7 @@ finally:
 try:
     from bot.agent.age_cypher_agent import age_agent
 except:
-    from agent.age_cypher_agent import age_agent
+    from .age_cypher_agent import age_agent
 
 import logfire
 

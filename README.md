@@ -102,12 +102,12 @@ dg_agent/
 
 ## 依赖
 
-- Python >= 3.8
-- requests >= 2.31.0
-- logfire >= 0.1.0
-- pydantic >= 2.5.0
+- Python >= 3.11
+- pydantic-ai >= 0.0.24 
+- logfire >= 3.5.3 
+- age >= PG16-v1.5.0-rc0
 - pytest >= 7.4.0
-- python-dotenv >= 1.0.0
+- lxml >= 5.3.1
 
 
 ## 开发
