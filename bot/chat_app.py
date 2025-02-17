@@ -27,7 +27,7 @@ from pydantic_ai.messages import (
 )
 
 import bot.models as models
-from bot.agent.gen_agent import do_it
+from bot.agent.dg_mind import do_it
 from bot.settings import settings
 
 origins = [
@@ -76,7 +76,7 @@ def to_chat_message(m: ModelMessage) -> ChatMessage:
 _mode_setting = settings.get_setting("agents")["chat_agent"]
 agent = Agent(models.infer_model(_mode_setting["model_name"], _mode_setting["api_key"]),
               result_type=str,
-              system_prompt="根据问题和查询结果，用中文回答做简单表述以Markdown格式输出。不要额外增加不存在的内容。",)
+              system_prompt="根据问题和查询结果，用中文回答做简单表述以Markdown格式输出。不要额外增加不存在的内容。查询结果如果包含SQL则直接返回SQL。",)
 
 @app.post('/chat/')
 async def post_chat(

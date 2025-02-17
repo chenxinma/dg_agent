@@ -1,7 +1,7 @@
 import asyncio
 
 from bot.chat_app import to_chat_message
-from bot.agent.gen_agent import do_it
+from bot.agent.dg_mind import do_it
 import bot.models as models
 
 from pydantic_ai import Agent

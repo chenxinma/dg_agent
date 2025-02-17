@@ -1,6 +1,5 @@
 from __future__ import annotations as _annotations
 
-import age
 from pydantic_ai import Agent, ModelRetry, RunContext
 
 import logfire
@@ -14,34 +13,29 @@ finally:
 from bot.settings import settings
 
 
-class AgeAgentFactory(AgentFactory):
-    _age_agent:Agent = None
-    
+class AgeAgentFactory(AgentFactory):   
     s_prompt = """
 任务描述：
 你是一个图数据库查询专家，擅长使用PostgreSQL的AGE图数据库环境插件的Cypher查询SQL操作图数据并在explanation给出相应的说明。
 以下是一个图数据库的结构描述，请根据用户的需求生成相应的SQL查询语句。
+确保查询语句简洁高效，保留{GRAPH_NAME}占位符以便后续执行时替换。
+注意变量名避免使用SQL关键字。
 
 图数据库结构：
-
 节点：
 Application（应用程序）
 Domain（业务域）
 Entity（数据实体）
 Table（物理表）
-Column（列|字段）
 
 关系：
-BELONG：Application 属于 Domain，表示一个应用程序属于某个业务域, 或者Column 属于 Table，表示一个字段于某个物理表
+BELONG：Application 属于 Domain，表示一个应用程序属于某个业务域。
 LINK：两个 Entity 之间可以连接，表示数据实体之间的关联。
 REL：Entity 关联 Application，表示数据实体与应用程序之间的关联。
 DUPLICATE：一个 Entity 复制自另一个 Entity，表示数据实体的复制关系。
 DEFINE：Entity 定义的  Table，，表示数据实体与物理表之间的关联。
 
-确保查询语句简洁高效。
-"""
-    s_example_prompt = """
-## 示例：
+示例：
 需求：查找属于某个业务域的所有应用程序。
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
@@ -167,8 +161,7 @@ $$) AS (path agtype);
             model_settings={'temperature': 0.0},
             deps_type=Deps,
             result_type=Response,
-            system_prompt=(AgeAgentFactory.s_prompt, 
-                           AgeAgentFactory.s_example_prompt),
+            system_prompt=AgeAgentFactory.s_prompt,
             
         )
         async def validate_result(ctx: RunContext[Deps], result: Response) -> Response:
@@ -185,6 +178,8 @@ $$) AS (path agtype);
                     with conn.cursor() as _cursor:
                         _cursor.execute(f'EXPLAIN {q}')
                 except Exception as e:
+                    logfire.warn(f'SQL: {q}')
+                    logfire.warn(f'错误查询: {e}')
                     raise ModelRetry(f'错误查询: {e}') from e
                 else:
                     return result
