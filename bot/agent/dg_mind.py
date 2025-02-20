@@ -135,9 +135,11 @@ class AgeCypherQuery(BaseNode[State, None, CypherQuery]):
         self.collect_table_defines(result.contents, ctx.state)
         return StepRunner(result)
 
-
+graph = Graph(nodes=(PlanGen, StepRunner, SqlGen, MetaCypherGen, AgeCypherQuery))
 async def do_it(question: str):
     state = State(question=question, deps=Deps(g_name=GRAPH_NAME, url=DSN))
-    graph = Graph(nodes=(PlanGen, StepRunner, SqlGen, MetaCypherGen, AgeCypherQuery))
     result, _ = await graph.run(PlanGen(), state=state)
     return result
+
+def to_marimo():
+    print(graph.mermaid_code(start_node=PlanGen))

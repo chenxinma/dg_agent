@@ -9,7 +9,7 @@ from pydantic_ai.usage import UsageLimits
 import logfire
 
 # 配置日志
-logfire.configure(environment='local')
+logfire.configure(environment='local', send_to_logfire=False,)
 
 import fastapi
 from fastapi.responses import StreamingResponse
