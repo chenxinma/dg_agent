@@ -55,3 +55,17 @@ class DataGovResponse(BaseModel):
     
     def add(self, row: List[Union[str, AGEVertex]]):
         self.contents.append(row)
+        
+class PlanStep(BaseModel):
+    """执行步骤"""
+    tool: str = Field(description="需要调用的工具名")
+    prompt: str = Field(description="执行步骤说明和必要参数")
+
+class PlanResponse(BaseModel):
+    """执行计划"""
+    thoughts: List[str] = Field(description="思考步骤说明")
+    steps: List[PlanStep] = Field(description="执行步骤清单")
+    
+class SQLResponse(BaseModel):
+    """sql response"""
+    sql: str

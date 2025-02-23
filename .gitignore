@@ -1,4 +1,5 @@
 .logfire
+.vscode
 .pytest_cache
 settings.yaml
 **/__pycache__
@@ -7,5 +8,4 @@ build
 dist
 graph/files/*
 
-
-sql_agent.py
+sql_lab.py

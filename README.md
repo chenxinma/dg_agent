@@ -38,17 +38,53 @@ dg-agent
 
 ### 模块功能
 
+## 配置
+配置文件使用YAML格式，默认路径为`settings.yaml`，示例如下：
+
+```yaml
+agents:
+  chat_agent:
+    model_name: ollama:deepseek-r1:8b
+    api_key: ANY
+  age_agent:
+    model_name: bailian:qwen-max
+    api_key: sk-xxxxx
+  plan_agent:
+    model_name: bailian:qwen-max
+    api_key: sk-xxxxx
+  sql_agent:
+    model_name: bailian:qwen-max
+    api_key: sk-xxxxx
+age:
+  graph: fsg_model
+  dsn: "host={IP} port={PORT} dbname={DBNAME} user={USER} password={PASSWORD}"
+```
+
+
 **bot/agent**
 - **age_cypher_agent.py**: 处理与年龄加密相关的数据治理任务
   - 生成年龄加密报告
   - 验证加密数据的完整性
-- **data_gov_agent.py**: 核心数据治理代理（废弃）
-  - 处理数据质量检查
-  - 自动化数据治理流程
-  - 生成治理报告
-- **gen_agent.py**: 通用数据治理代理
-  - 处理通用数据治理任务
-  - 提供数据转换功能
+- **plan_agent.py**: 执行计划agent，跟进用户问题意图规划执行计划
+- **sql_agent.py**: 依据元模型获得的物理表的信息生成SQL
+- **dg_mind.py**: 数据治理问答执行
+  - 回答业务域、应用、数据实体的相关的问题
+  - 帮助生产数据数据查询SQL
+```mermaid
+---
+title: dg mind 
+---
+stateDiagram-v2
+  [*] --> PlanGen
+  PlanGen --> StepRunner
+  StepRunner --> MetaCypherGen
+  StepRunner --> SqlGen
+  StepRunner --> [*]
+  SqlGen --> StepRunner
+  MetaCypherGen --> AgeCypherQuery
+  AgeCypherQuery --> MetaCypherGen
+  AgeCypherQuery --> StepRunner
+```
 
 **bot/models**
 - **siliconflow.py**: SiliconFlow模型实现
@@ -56,11 +92,11 @@ dg-agent
   - 支持模型性能评估
 
 **graph**
-- **application.py**: 应用层实现
-- **domain.py**: 领域模型
-- **entity.py**: 实体定义
-- **reload_graph.py**: 图数据加载
-- **reload_table.py**: 表数据加载
+- **application.py**: 应用元模型
+- **domain.py**: 业务域元模型
+- **entity.py**: 数据实体元模型
+- **reload_graph.py**: 元模型数据加载
+- **reload_table.py**: 数据库物理表数据加载
 
 **tests**
 - 单元测试模块，覆盖核心功能测试
