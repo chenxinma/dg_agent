@@ -106,6 +106,13 @@ class ConceptSturture:
                   CREATE (a)-[e:USES]->(b)
                   RETURN e
                 $$) as (e agtype);''', (GRAPH_NAME, _entity.app.id, _entity.id))
+                
+                _cursor.execute('''SELECT * from cypher(%s, $$
+                  MATCH (a:BusinessDomain), (b:DataEntity)
+                  WHERE a.nid = %s AND b.nid = %s
+                  CREATE (b)-[e:BELONGS_TO]->(a)
+                  RETURN e
+                $$) as (e agtype);''', (GRAPH_NAME, _entity.app.domain.id , _entity.id))
 
         print("    Saving entity FLOWS_TO")
         with conn_1.cursor() as _cursor:

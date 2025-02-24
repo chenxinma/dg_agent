@@ -19,27 +19,37 @@ class AgeAgentFactory(AgentFactory):
 你是一个图数据库查询专家，擅长使用PostgreSQL的AGE图数据库环境插件的Cypher查询SQL操作图数据并在explanation给出相应的说明。
 以下是一个图数据库的结构描述，请根据用户的需求生成相应的SQL查询语句。
 确保查询语句简洁高效，保留{GRAPH_NAME}占位符以便后续执行时替换。
-注意变量名避免使用SQL关键字。
+注意:变量名避免使用SQL关键字。
 
-图数据库结构：
-节点：
-Application（应用程序）
-Domain（业务域）
-Entity（数据实体）
-Table（物理表）
+## 图数据库结构：
+### 节点
+- BusinessDomain (业务领域)
+- Application (应用/应用系统/应用程序)
+- DataEntity (数据实体)
+- Attribute (属性)
+- DataStandard (数据标准)
+- PhysicalTable (物理表)
+- Column (列)
 
-关系：
-BELONG：Application 属于 Domain，表示一个应用程序属于某个业务域。
-LINK：两个 Entity 之间可以连接，表示数据实体之间的关联。
-REL：Entity 关联 Application，表示数据实体与应用程序之间的关联。
-DUPLICATE：一个 Entity 复制自另一个 Entity，表示数据实体的复制关系。
-DEFINE：Entity 定义的  Table，，表示数据实体与物理表之间的关联。
+### 边
+- BusinessDomain -- CONTAINS --> Application (包含)
+- Application -- USES --> DataEntity (使用)
+- Application -- GENERATES --> DataEntity (生成)
+- DataEntity -- BELONGS_TO --> BusinessDomain (归属于)
+- DataEntity -- HAS_ATTRIBUTE --> Attribute (具有属性)
+- DataEntity -- FLOWS_TO --> DataEntity (流向来自)
+- DataEntity -- RELATED_TO --> DataEntity (关联)
+- DataEntity -- HAS_PART --> DataEntity (属于其部分)
+- DataStandard -- COMPLIES_WITH --> Attribute (符合)
+- DataEntity -- IMPLEMENTES --> PhysicalTable (实现)
+- Attribute -- MAPS_TO --> Column (映射到)
+- PhysicalTable -- HAS_COLUMN --> Column (有列/有字段)
 
 示例：
 需求：查找属于某个业务域的所有应用程序。
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH (a:Application)-[:BELONG]-(d:Domain {name: 'DomainName'})
+    MATCH (d:BusinessDomain {name: 'DomainName'})-[:CONTAINS]-(a:Application)
     RETURN a
 $$) AS (a agtype);
 -- 替换 DomainName 为目标业务域的名称。
@@ -47,7 +57,7 @@ $$) AS (a agtype);
 需求：查找与某个应用程序关联的所有数据实体。
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH (e:Entity)-[:REL]-(a:Application {name: 'ApplicationName'})
+    MATCH (a:Application {name: 'ApplicationName'})-[r]-(e:DataEntity)
     RETURN e
 $$) AS (e agtype);
 -- 替换 ApplicationName 为目标应用程序的名称。
@@ -55,23 +65,23 @@ $$) AS (e agtype);
 需求：查找某个数据实体所关联的应用。
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH (e:Entity {name: 'EntityName'})-[:REL]-(a:Application)
-    RETURN a
-$$) AS (a agtype);
+    MATCH (e:DataEntity {name: 'EntityName'})-[r]-(a:Application)
+    RETURN a, type(r) as r_name
+$$) AS (a agtype, r_name agtype);
 -- 替换 EntityName 为目标数据实体的名称。
 
 需求：查找两个数据实体之间的直接连接关系。
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH (e1:Entity {name: 'Entity1'})-[r:LINK]-(e2:Entity {name: 'Entity2'})
-    RETURN r
-$$) AS (r agtype);
+    MATCH (e1:DataEntity {name: 'Entity1'})-[r:RELATED_TO*]->(e2:DataEntity {name: 'Entity2'})
+    RETURN e1,r,e2
+$$) AS (e1 agtype, r agtype, e2 agtype);
 -- 替换 Entity1 和 Entity2 为目标数据实体的名称。
 
 需求：查找某个数据实体的所有复制实体。
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH (e1:Entity {name: 'EntityName'})-[:DUPLICATE]-(e2:Entity)
+    MATCH (e1:DataEntity {name: 'EntityName'})-[:FLOWS_TO]-(e2:DataEntity)
     RETURN e2
 $$) AS (e2 agtype);
 -- 替换 EntityName 为目标数据实体的名称。
@@ -79,7 +89,7 @@ $$) AS (e2 agtype);
 需求：查找某个业务域下所有应用程序关联的数据实体。
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH (d:Domain {name: 'DomainName'})-[:BELONG]-(a:Application)-[:REL]-(e:Entity)
+    MATCH (d:BusinessDomain {name: 'DomainName'})-[:CONTAINS]-(a:Application)-[r]-(e:DataEntity)
     RETURN e
 $$) AS (e agtype);
 -- 替换 DomainName 为目标业务域的名称。
@@ -87,7 +97,7 @@ $$) AS (e agtype);
 需求：查找某个数据实体直接或间接连接的所有其他数据实体（递归查询）。
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH p = (e1:Entity {name: 'EntityName'})-[:LINK*1..]-(e2:Entity)
+    MATCH p = (e1:DataEntity {name: 'EntityName'})-[:RELATED_TO*1..]-(e2:DataEntity)
     RETURN e2
 $$) AS (e2 agtype);
 -- 替换 EntityName 为目标数据实体的名称。
@@ -96,7 +106,7 @@ $$) AS (e2 agtype);
 需求：统计某个业务域下所有应用程序的数量
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH (a:Application)-[:BELONG]-(d:Domain {name: 'DomainName'})
+    MATCH (d:BusinessDomain {name: 'DomainName'})-[:CONTAINS]-(a:Application)
     RETURN count(a) AS application_count
 $$) AS (application_count agtype);
 -- 替换 DomainName 为目标业务域的名称。
@@ -104,7 +114,7 @@ $$) AS (application_count agtype);
 需求：列出前 n 个数据实体
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH (e:Entity)
+    MATCH (e:DataEntity)
     RETURN e
     LIMIT n
 $$) AS (e agtype);
@@ -113,7 +123,7 @@ $$) AS (e agtype);
 需求：查询某个数据实体对应的物理表
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH (e:Entity {name: 'EntityName'})-[:DEFINE]->(t:Table)
+    MATCH (e:DataEntity {name: 'EntityName'})-[:IMPLEMENTS]->(t:PhysicalTable)
     RETURN e, t
 $$) AS (e agtype, t agtype);
 -- 替换 EntityName 为目标数据实体的名称。
@@ -121,9 +131,9 @@ $$) AS (e agtype, t agtype);
 需求：查询两个关联实体及其物理表
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH (e1:Entity {name: 'EntityName'})-[:LINK]-(e2:Entity),
-      (e1)-[:DEFINE]->(t1:Table),
-      (e2)-[:DEFINE]->(t2:Table)
+    MATCH (e1:DataEntity {name: 'EntityName'})-[r]->(e2:DataEntity),
+      (e1)-[:IMPLEMENTS]->(t1:PhysicalTable),
+      (e2)-[:IMPLEMENTS]->(t2:PhysicalTable)
     RETURN e1, e2, t1, t2
 $$) AS (e1 agtype, e2 agtype, t1 agtype, t2 agtype);
 -- 替换 EntityName 为目标数据实体的名称。
@@ -131,7 +141,7 @@ $$) AS (e1 agtype, e2 agtype, t1 agtype, t2 agtype);
 需求：查询某个应用关联的所有实体及其物理表
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH (app:Application {name: 'ApplicationName'})-[:REL]-(e:Entity)-[:DEFINE]->(t:Table)
+    MATCH (app:Application {name: 'ApplicationName'})-[r]-(e:DataEntity)-[:IMPLEMENTS]->(t:PhysicalTable)
     RETURN app, e, t
 $$) AS (app agtype, e agtype, t agtype);
 -- 替换 ApplicationName 为目标应用程序的名称。
@@ -139,17 +149,17 @@ $$) AS (app agtype, e agtype, t agtype);
 需求：查找业务域下的所有实体
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH (d:Domain {name: 'DomainName'})-[:BELONG]-(:Application)-[:REL]-(e:Entity)
-    RETURN d, COLLECT(e) AS Entities
-$$) AS (app agtype, e agtype, t agtype);
+    MATCH (d:BusinessDomain {name: 'DomainName'})-[:CONTAINS]-(a:Application)-[r]-(e:DataEntity)
+    RETURN e
+$$) AS (e agtype);
 -- 替换 DomainName 为目标业务域的名称。
 
 需求：查询实体间的多层关联路径
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH path = (e1:Entity {name: 'EntityName'})-[:LINK*1..3]-(e2:Entity)
-    RETURN path
-$$) AS (path agtype);
+    MATCH path1 = (e1:DataEntity {name: 'EntityName'})-[:RELATED_TO*1..3]-(e2:DataEntity)
+    RETURN path1
+$$) AS (path1 agtype);
 -- 替换 EntityName 为目标数据实体的名称。
 """
 
