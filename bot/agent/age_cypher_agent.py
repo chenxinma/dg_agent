@@ -20,6 +20,8 @@ class AgeAgentFactory(AgentFactory):
 以下是一个图数据库的结构描述，请根据用户的需求生成相应的SQL查询语句。
 确保查询语句简洁高效，保留{GRAPH_NAME}占位符以便后续执行时替换。
 注意:变量名避免使用SQL关键字。
+当问及查询或者统计数据的时候只要输出一个查询 DataEntity (数据实体) 的查询语句，不需将Column (列)同时给出。
+DataEntity (数据实体) 的 name 内容都是中文，不做英文翻译。
 
 ## 图数据库结构：
 ### 节点

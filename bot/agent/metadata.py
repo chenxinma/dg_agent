@@ -18,28 +18,23 @@ class Application(AGEVertex):
     """应用程序"""
     pass
 
-class Domain(AGEVertex):
+class BusinessDomain(AGEVertex):
     """业务域"""
     code: str = Field(description="业务域代码")
-        
- 
-class Entity(AGEVertex):
-    """数据实体"""
-    pass
 
-class Table(AGEVertex):
+class PhysicalTable(AGEVertex):
     """物理表"""
     db_schema: str = Field(description="schema")
     full_table_name: str = Field(description="完整表名")
     table_name: str = Field(description="表名")
     columns: List[Dict] = Field(default=None)
 
-class Entity(AGEVertex):
+class DataEntity(AGEVertex):
     """数据实体"""
-    tables: List[Table] = []
+    tables: List[PhysicalTable] = []
     
 @dataclass
-class Link:
+class RelatedTo:
     from_id:int
     to_id:int
     id:int

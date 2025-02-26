@@ -13,34 +13,34 @@ try:
 finally:
     pass
 
-class DomainMetaFactory(MetaFactory):
+class BusinessDomainMetaFactory(MetaFactory):
     def fit(self, cell)->bool:
-        return isinstance(cell, age.models.Vertex) and  cell.label == "Domain"
+        return isinstance(cell, age.models.Vertex) and  cell.label == "BusinessDomain"
 
     def convert(self, cell, conn):
-        return Domain(id=cell.id, 
+        return BusinessDomain(id=cell.id, 
                         name=cell.properties["name"], 
                         node=cell.label,
                         code=cell.properties["code"])
 
-class EntityMetaFactory(MetaFactory):
+class DataEntityMetaFactory(MetaFactory):
     def fit(self, cell)->bool:
-        return isinstance(cell, age.models.Vertex) and  cell.label == "Entity"
+        return isinstance(cell, age.models.Vertex) and  cell.label == "DataEntity"
 
     def convert(self, cell, conn):
         tables = self.load_tables(conn, cell.id)
         
-        return Entity(id=cell.id, 
+        return DataEntity(id=cell.id, 
                       name=cell.properties["name"], 
                       node=cell.label,
                       tables=tables)
 
     def load_tables(self, conn, entity_id:int):
         tables = []
-        tbl_factory = TableMetaFactory(self.graph_name)
+        tbl_factory = PhysicalTableMetaFactory(self.graph_name)
         with conn.cursor() as _cursor:
             _cursor.execute("""SELECT * FROM cypher(%s, $$
-                MATCH (e:Entity)-[:DEFINE]->(t:Table) WHERE ID(e)=%s
+                MATCH (e:DataEntity)-[:IMPLEMENTS]->(t:PhysicalTable) WHERE ID(e)=%s
                 RETURN t
             $$) AS (t agtype);
             """, (self.graph_name, entity_id))
@@ -51,13 +51,13 @@ class EntityMetaFactory(MetaFactory):
                 tables.append(d)
         return tables
 
-class TableMetaFactory(MetaFactory):
+class PhysicalTableMetaFactory(MetaFactory):
     def fit(self, cell)->bool:
-        return isinstance(cell, age.models.Vertex) and  cell.label == "Table"
+        return isinstance(cell, age.models.Vertex) and  cell.label == "PhysicalTable"
 
     def convert(self, cell, conn):
         columns = self.load_columns(conn, cell.properties["full_table_name"])
-        return Table(id=cell.id, 
+        return PhysicalTable(id=cell.id, 
                       name=cell.properties["name"],
                       db_schema=cell.properties["schema"],
                       table_name=cell.properties["table_name"],
@@ -68,7 +68,7 @@ class TableMetaFactory(MetaFactory):
     def load_columns(self, conn, full_table_name:str) ->  List[Dict]:
         with conn.cursor() as _cursor:
             _cursor.execute("""SELECT * FROM cypher(%s, $$
-                MATCH (t:Table {full_table_name: %s})-[:BELONG]-(c:Column)
+                MATCH (t:PhysicalTable {full_table_name: %s})-[:HAS_COLUMN]->(c:Column)
                 RETURN c
             $$) AS (c agtype);
             """, (self.graph_name, full_table_name))
@@ -90,21 +90,21 @@ class OtherMetaFactory(MetaFactory):
                     cell.properties["name"],
                     cell.label))
 
-class LinkMetaFactory(MetaFactory):
+class RelatedToMetaFactory(MetaFactory):
     def fit(self, cell)->bool:
-        return isinstance(cell, age.models.Edge)  and  cell.label == "LINK" 
+        return isinstance(cell, age.models.Edge)  and  cell.label == "RELATED_TO" 
 
     def convert(self, cell, conn):
-        return Link(id=cell.id, from_id=cell.start_id, to_id=cell.end_id)
+        return RelatedTo(id=cell.id, from_id=cell.start_id, to_id=cell.end_id)
     
 
 def create_factory_chain(graph_name:str)-> List[MetaFactory]: 
     meta_factories = [
-        DomainMetaFactory(graph_name),
-        EntityMetaFactory(graph_name),
-        TableMetaFactory(graph_name),
+        BusinessDomainMetaFactory(graph_name),
+        DataEntityMetaFactory(graph_name),
+        PhysicalTableMetaFactory(graph_name),
         OtherMetaFactory(graph_name),
-        LinkMetaFactory(graph_name)
+        RelatedToMetaFactory(graph_name)
     ]
     return meta_factories
 
@@ -143,8 +143,11 @@ def age_metadata_query(
             return resp
         
 
-class TableEncoder(json.JSONEncoder):
+class PhysicalTableEncoder(json.JSONEncoder):
     def default(self, obj):
-        if isinstance(obj, Table):
-            return obj.model_dump()
+        if isinstance(obj, PhysicalTable):
+            ddl = f"CREATE TABLE IF NOT EXISTS {obj.full_table_name} ("
+            ddl += '\n,'.join([f"`{c['name']}` {c['dtype']}" for c in obj.columns])
+            ddl += ");"
+            return ddl
         return super().default(obj)

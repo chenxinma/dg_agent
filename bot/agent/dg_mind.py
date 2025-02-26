@@ -18,7 +18,7 @@ try:
     from .age_cypher_agent import age_agent
     from .sql_agent import sql_agent
     from .plan_agent import plan_agent
-    from .metadata_tools import create_factory_chain, age_metadata_query, TableEncoder
+    from .metadata_tools import create_factory_chain, age_metadata_query, PhysicalTableEncoder
 finally:
     pass
 
@@ -26,7 +26,7 @@ finally:
 class State:
     question: str
     deps: Deps
-    tables: List[Table] = field(default=None)
+    tables: List[PhysicalTable] = field(default=None)
     agent_messages: list[ModelMessage] = field(default_factory=list)
     current_step:int = 0
     plan: PlanResponse = field(default=None)
@@ -76,7 +76,7 @@ class SqlGen(BaseNode[State]):
     prompt:str | None = None
     
     async def run(self, ctx: GraphRunContext[State]) -> StepRunner:
-        prompt = "问题：{}\n参考物理表:{}".format(self.prompt, json.dumps(ctx.state.tables, cls=TableEncoder))
+        prompt = "问题：{}\n参考物理表:{}".format(self.prompt, json.dumps(ctx.state.tables, cls=PhysicalTableEncoder))
         result = await sql_agent.run(
             prompt,
             deps=ctx.state.deps,
@@ -109,15 +109,15 @@ class AgeCypherQuery(BaseNode[State, None, CypherQuery]):
     meta_factories = create_factory_chain(GRAPH_NAME)
     
     def collect_table_defines(self, 
-                              contents: List | Entity | Table, 
+                              contents: List | DataEntity | PhysicalTable, 
                               state:State) -> None:
         if isinstance(contents, list):
             for element in contents:
                 self.collect_table_defines(element, state)
         else:
-            if isinstance(contents, Entity):
+            if isinstance(contents, DataEntity):
                 state.tables.extend(contents.tables)
-            if isinstance(contents, Table):
+            if isinstance(contents, PhysicalTable):
                 state.tables.append(contents)
 
     async def run(
