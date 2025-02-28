@@ -97,7 +97,7 @@ async def post_chat(
         )
         
         answer = await do_it(prompt)
-        question = f"问题：{prompt}\n查询结果：{answer.model_dump_json()}"
+        question = f"问题：{prompt}\n查询结果：{answer}"
         async with agent.run_stream(question) as result:
             async for text in result.stream(debounce_by=0.01):
                 # text here is a `str` and the frontend wants

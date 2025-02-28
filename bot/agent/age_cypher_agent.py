@@ -20,8 +20,8 @@ class AgeAgentFactory(AgentFactory):
 以下是一个图数据库的结构描述，请根据用户的需求生成相应的SQL查询语句。
 确保查询语句简洁高效，保留{GRAPH_NAME}占位符以便后续执行时替换。
 注意:变量名避免使用SQL关键字。
-当问及查询或者统计数据的时候只要输出一个查询 DataEntity (数据实体) 的查询语句，不需将Column (列)同时给出。
 DataEntity (数据实体) 的 name 内容都是中文，不做英文翻译。
+获取DataEntity (数据实体)的同时获取 RELATED_TO（关联）信息。
 
 ## 图数据库结构：
 ### 节点
@@ -40,7 +40,7 @@ DataEntity (数据实体) 的 name 内容都是中文，不做英文翻译。
 - DataEntity -- BELONGS_TO --> BusinessDomain (归属于)
 - DataEntity -- HAS_ATTRIBUTE --> Attribute (具有属性)
 - DataEntity -- FLOWS_TO --> DataEntity (流向来自)
-- DataEntity -- RELATED_TO --> DataEntity (关联)
+- DataEntity -- RELATED_TO --> DataEntity (关联) 包含rel的关联关系说明
 - DataEntity -- HAS_PART --> DataEntity (属于其部分)
 - DataStandard -- COMPLIES_WITH --> Attribute (符合)
 - DataEntity -- IMPLEMENTES --> PhysicalTable (实现)
@@ -75,7 +75,7 @@ $$) AS (a agtype, r_name agtype);
 需求：查找两个数据实体之间的直接连接关系。
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH (e1:DataEntity {name: 'Entity1'})-[r:RELATED_TO*]->(e2:DataEntity {name: 'Entity2'})
+    MATCH (e1:DataEntity {name: 'Entity1'})-[r:RELATED_TO]->(e2:DataEntity {name: 'Entity2'})
     RETURN e1,r,e2
 $$) AS (e1 agtype, r agtype, e2 agtype);
 -- 替换 Entity1 和 Entity2 为目标数据实体的名称。
@@ -99,9 +99,9 @@ $$) AS (e agtype);
 需求：查找某个数据实体直接或间接连接的所有其他数据实体（递归查询）。
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH p = (e1:DataEntity {name: 'EntityName'})-[:RELATED_TO*1..]-(e2:DataEntity)
+    MATCH p = (e1:DataEntity {name: 'EntityName'})-[r:RELATED_TO*1..2]-(e2:DataEntity)
     RETURN e2
-$$) AS (e2 agtype);
+$$) AS (e1 agtype, e2 agtype, r agtype);
 -- 替换 EntityName 为目标数据实体的名称。
 -- *1.. 表示递归查询，查找直接或间接连接的所有数据实体。
 
@@ -136,8 +136,8 @@ SELECT * FROM cypher('{GRAPH_NAME}', $$
     MATCH (e1:DataEntity {name: 'EntityName'})-[r]->(e2:DataEntity),
       (e1)-[:IMPLEMENTS]->(t1:PhysicalTable),
       (e2)-[:IMPLEMENTS]->(t2:PhysicalTable)
-    RETURN e1, e2, t1, t2
-$$) AS (e1 agtype, e2 agtype, t1 agtype, t2 agtype);
+    RETURN e1, e2, r, t1, t2
+$$) AS (e1 agtype, e2 agtype, r agtype, t1 agtype, t2 agtype);
 -- 替换 EntityName 为目标数据实体的名称。
 
 需求：查询某个应用关联的所有实体及其物理表
@@ -145,7 +145,7 @@ $$) AS (e1 agtype, e2 agtype, t1 agtype, t2 agtype);
 SELECT * FROM cypher('{GRAPH_NAME}', $$
     MATCH (app:Application {name: 'ApplicationName'})-[r]-(e:DataEntity)-[:IMPLEMENTS]->(t:PhysicalTable)
     RETURN app, e, t
-$$) AS (app agtype, e agtype, t agtype);
+$$) AS (app agtype, e agtype, r agtype, t agtype);
 -- 替换 ApplicationName 为目标应用程序的名称。
 
 需求：查找业务域下的所有实体
@@ -159,7 +159,7 @@ $$) AS (e agtype);
 需求：查询实体间的多层关联路径
 查询：
 SELECT * FROM cypher('{GRAPH_NAME}', $$
-    MATCH path1 = (e1:DataEntity {name: 'EntityName'})-[:RELATED_TO*1..3]-(e2:DataEntity)
+    MATCH path1 = (e1:DataEntity {name: 'EntityName'})-[r:RELATED_TO*1..3]-(e2:DataEntity)
     RETURN path1
 $$) AS (path1 agtype);
 -- 替换 EntityName 为目标数据实体的名称。
@@ -184,14 +184,14 @@ $$) AS (path1 agtype);
                     raise ModelRetry('请编写一个MATCH的查询。')
                 
                 result.sql = result.sql.replace("\\n", "\n")
+                print(result.sql)
                 try:
                     q = result.sql.replace("{GRAPH_NAME}", GRAPH_NAME)
                     conn = ctx.deps.create_ag().connection
                     with conn.cursor() as _cursor:
-                        _cursor.execute(f'EXPLAIN {q}')
+                        _cursor.execute('EXPLAIN ' + q)
                 except Exception as e:
-                    logfire.warn(f'SQL: {q}')
-                    logfire.warn(f'错误查询: {e}')
+                    logfire.warn('错误查询: {e}', e=e)
                     raise ModelRetry(f'错误查询: {e}') from e
                 else:
                     return result

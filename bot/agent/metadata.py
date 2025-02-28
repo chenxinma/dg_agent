@@ -32,12 +32,12 @@ class PhysicalTable(AGEVertex):
 class DataEntity(AGEVertex):
     """数据实体"""
     tables: List[PhysicalTable] = []
-    
-@dataclass
-class RelatedTo:
+
+class RelatedTo(BaseModel):
     from_id:int
     to_id:int
     id:int
+    rel:str = Field(description="关联", default='')
     
 @dataclass(init=False)
 class MetaFactory:

@@ -95,6 +95,8 @@ class RelatedToMetaFactory(MetaFactory):
         return isinstance(cell, age.models.Edge)  and  cell.label == "RELATED_TO" 
 
     def convert(self, cell, conn):
+        if "rel" in cell.properties:
+            return RelatedTo(id=cell.id, from_id=cell.start_id, to_id=cell.end_id, rel=cell.properties["rel"])
         return RelatedTo(id=cell.id, from_id=cell.start_id, to_id=cell.end_id)
     
 
@@ -107,6 +109,26 @@ def create_factory_chain(graph_name:str)-> List[MetaFactory]:
         RelatedToMetaFactory(graph_name)
     ]
     return meta_factories
+
+def traverse_age_result(contents, meta_factories:List[MetaFactory], conn, resp:DataGovResponse):
+    for row in contents:
+        _row = []
+        for cell in row:
+            if isinstance(cell, list):
+                for _c in cell:
+                    d = convert_age2model(meta_factories, _c, conn)
+                    _row.append(d)
+            else:
+                d = convert_age2model(meta_factories, cell, conn)
+                _row.append(d)
+        resp.add(_row)
+
+
+def convert_age2model(meta_factories, c, conn):        
+    for factory in meta_factories:
+        if factory.fit(c):
+            d = factory.convert(c, conn)
+            return d
 
 def age_metadata_query(
         age_conn: age.Age,
@@ -130,15 +152,8 @@ def age_metadata_query(
             _cursor.execute(q)            
             result = _cursor.fetchall()
             resp = DataGovResponse(description=query.explanation)
-            for _r in result:
-                row: List[Union[str, BaseModel]] = []
-                for c in _r:
-                    for factory in meta_factories:
-                        if factory.fit(c):
-                            d = factory.convert(c, _conn)
-                            row.append(d)
-                            break
-                resp.add(row)
+            traverse_age_result(result, meta_factories, _conn, resp)
+            
             logfire.info("result rows: %d " % (len(resp.contents)))
             return resp
         
@@ -147,7 +162,7 @@ class PhysicalTableEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, PhysicalTable):
             ddl = f"CREATE TABLE IF NOT EXISTS {obj.full_table_name} ("
-            ddl += '\n,'.join([f"`{c['name']}` {c['dtype']}" for c in obj.columns])
-            ddl += ");"
+            ddl += ',\n'.join([f"`{c['name']}` {c['dtype']}" for c in obj.columns])
+            ddl += ");\n"
             return ddl
         return super().default(obj)

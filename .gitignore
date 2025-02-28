@@ -9,3 +9,5 @@ dist
 graph/files/*
 
 sql_lab.py
+
+__marimo__

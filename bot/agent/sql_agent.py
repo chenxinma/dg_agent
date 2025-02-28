@@ -20,7 +20,8 @@ class SqlAgentFactory(AgentFactory):
             result_type=SQLResponse,
             system_prompt=(
                 "参考工具metadata获得的元数据，使用其中Table·full_table_name·属性作为表名 和 columns定义生产查询SQL。",
-                "约束使用Trino的SQL语法，中文别名需要使用双引号,不包含结尾分号。结果内容仅包含SQL语句。",
+                "**约束:** 使用Trino的SQL语法，中文别名需要使用双引号,不包含结尾分号。结果内容仅包含SQL语句。",
+                "**约束:** 返回仅包含SQL语句。"
             )
         )
         return agent

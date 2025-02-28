@@ -49,11 +49,11 @@ class AgentFactory:
 
 class DataGovResponse(BaseModel):
     """数据治理相关信息"""
-    contents: List[List[Union[str, AGEVertex]]] = Field(default=[], 
-                                                        description="`cypher_query·给出的CypherQuery`的查询结果")
+    contents: List[List[Union[str, BaseModel]]]= Field(default=[], 
+                                                  description="`cypher_query·给出的CypherQuery`的查询结果")
     description: str = Field(default="", description="查询结果描述")    
     
-    def add(self, row: List[Union[str, AGEVertex]]):
+    def add(self, row: List[Union[str, BaseModel]]):
         self.contents.append(row)
         
 class PlanStep(BaseModel):

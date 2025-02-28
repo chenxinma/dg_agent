@@ -1,6 +1,7 @@
 from __future__ import annotations as _annotations
 
 import json
+import sqlparse
 from dataclasses import dataclass, field
 from typing import List, Union
 from pydantic_ai.messages import ModelMessage
@@ -27,6 +28,7 @@ class State:
     question: str
     deps: Deps
     tables: List[PhysicalTable] = field(default=None)
+    rels: List[RelatedTo] = field(default=None)
     agent_messages: list[ModelMessage] = field(default_factory=list)
     current_step:int = 0
     plan: PlanResponse = field(default=None)
@@ -57,6 +59,7 @@ class StepRunner(BaseNode[State, None, Union[PlanResponse, DataGovResponse, SQLR
             ctx.state.plan = self.response
             ctx.state.current_step = 0
             ctx.state.tables = []
+            ctx.state.rels = []
         
         if ctx.state.current_step < len(ctx.state.plan.steps):
             step = ctx.state.plan.steps[ctx.state.current_step]
@@ -66,7 +69,10 @@ class StepRunner(BaseNode[State, None, Union[PlanResponse, DataGovResponse, SQLR
             elif "age_agent" == step.tool:
                 return MetaCypherGen(prompt=step.prompt)
         else:
-            return End(self.response) # 最后一次的步骤结果
+            if isinstance(self.response, SQLResponse):
+                return End(self.response.sql) # SQL
+            else:
+                return End(self.response) # 最后一次的步骤结果
 
 
 @dataclass
@@ -76,12 +82,15 @@ class SqlGen(BaseNode[State]):
     prompt:str | None = None
     
     async def run(self, ctx: GraphRunContext[State]) -> StepRunner:
-        prompt = "问题：{}\n参考物理表:{}".format(self.prompt, json.dumps(ctx.state.tables, cls=PhysicalTableEncoder))
+        prompt = "问题:{}\n参考物理表:{}\n物理表关联:{}".format(self.prompt, 
+                                          "\n".join([json.dumps(t, cls=PhysicalTableEncoder) for t in ctx.state.tables]),
+                                          "\n".join([r.rel for r in ctx.state.rels]))
         result = await sql_agent.run(
             prompt,
             deps=ctx.state.deps,
         )
         ctx.state.agent_messages += result.all_messages()
+        result.data.sql = sqlparse.format(result.data.sql, reindent=True, keyword_case='upper')
         return StepRunner(result.data)
  
  
@@ -109,7 +118,7 @@ class AgeCypherQuery(BaseNode[State, None, CypherQuery]):
     meta_factories = create_factory_chain(GRAPH_NAME)
     
     def collect_table_defines(self, 
-                              contents: List | DataEntity | PhysicalTable, 
+                              contents: List | DataEntity | PhysicalTable | RelatedTo, 
                               state:State) -> None:
         if isinstance(contents, list):
             for element in contents:
@@ -119,6 +128,8 @@ class AgeCypherQuery(BaseNode[State, None, CypherQuery]):
                 state.tables.extend(contents.tables)
             if isinstance(contents, PhysicalTable):
                 state.tables.append(contents)
+            if isinstance(contents, RelatedTo):
+                state.rels.append(contents)
 
     async def run(
         self,
