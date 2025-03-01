@@ -1,11 +1,12 @@
 from __future__ import annotations as _annotations
 
 import json
-import sqlparse
 from dataclasses import dataclass, field
 from typing import List, Union
 from pydantic_ai.messages import ModelMessage
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
+
+import sqlparse
 
 try:
     from . import (Deps, 
@@ -13,15 +14,17 @@ try:
                SQLResponse, 
                DataGovResponse,
                PlanResponse,
-               GRAPH_NAME, 
-               DSN)
+               )
     from .metadata import *
     from .age_cypher_agent import age_agent
     from .sql_agent import sql_agent
     from .plan_agent import plan_agent
-    from .metadata_tools import create_factory_chain, age_metadata_query, PhysicalTableEncoder
+    from .metadata_tools import MetadataHelper, PhysicalTableEncoder
 finally:
     pass
+
+from bot.settings import settings
+from bot.graph.age_graph import AGEGraph
 
 @dataclass
 class State:
@@ -115,7 +118,6 @@ class AgeCypherQuery(BaseNode[State, None, CypherQuery]):
     """执行AGE的数据元模型查询
     """
     query: CypherQuery
-    meta_factories = create_factory_chain(GRAPH_NAME)
     
     def collect_table_defines(self, 
                               contents: List | DataEntity | PhysicalTable | RelatedTo, 
@@ -135,10 +137,8 @@ class AgeCypherQuery(BaseNode[State, None, CypherQuery]):
         self,
         ctx: GraphRunContext[State],
     ) -> MetaCypherGen | StepRunner:
-        result:DataGovResponse = age_metadata_query(ctx.state.deps.create_ag(), 
-                                    GRAPH_NAME, 
-                                    AgeCypherQuery.meta_factories, 
-                                    self.query)
+        metadata_helper : MetadataHelper = MetadataHelper(ctx.state.deps.graph)
+        result:DataGovResponse = metadata_helper.query(self.query)
         # 如果描述为空，则重新执行Cypher生成
         if result.description is None:
             return MetaCypherGen(prompt=self.query.explanation)
@@ -147,10 +147,16 @@ class AgeCypherQuery(BaseNode[State, None, CypherQuery]):
         return StepRunner(result)
 
 graph = Graph(nodes=(PlanGen, StepRunner, SqlGen, MetaCypherGen, AgeCypherQuery))
+
 async def do_it(question: str):
-    state = State(question=question, deps=Deps(g_name=GRAPH_NAME, url=DSN))
+    """执行任务"""
+    age_graph = AGEGraph(graph_name=settings.get_setting("age")["graph"],
+                        dns=settings.get_setting("age")["dns"])
+    state = State(question=question, 
+                  deps=Deps(graph=age_graph))
     result, _ = await graph.run(PlanGen(), state=state)
     return result
 
 def to_marimo():
+    """运行图"""
     print(graph.mermaid_code(start_node=PlanGen))

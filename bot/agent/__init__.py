@@ -1,25 +1,20 @@
-import age
+"""Agent for DataGov
+"""
 from dataclasses import dataclass
+from typing import Annotated, Union, List
+from typing_extensions import TypeAlias
+from annotated_types import MinLen
+
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent 
 
-from typing import Annotated, Union, List
-from annotated_types import MinLen
-from typing_extensions import TypeAlias
-
-from bot.settings import settings
-from .metadata import AGEVertex
-
+from bot.graph import age_graph
 
 
 
 @dataclass
 class Deps:
-    g_name: str
-    url: str
-
-    def create_ag(self):
-        return age.connect(graph=GRAPH_NAME, dsn=DSN)
+    graph: age_graph.AGEGraph
 
 
 class CypherQuery(BaseModel):
@@ -48,12 +43,10 @@ class AgentFactory:
 
 class DataGovResponse(BaseModel):
     """数据治理相关信息"""
-    contents: List[List[Union[str, BaseModel]]]= Field(default=[], 
+    contents: List[List[Union[str, BaseModel]]] = Field(default=[], 
                                                   description="`cypher_query·给出的CypherQuery`的查询结果")
-    description: str = Field(default="", description="查询结果描述")    
-    
-    def add(self, row: List[Union[str, BaseModel]]):
-        self.contents.append(row)
+    description: str = Field(default="", description="查询结果描述")
+
         
 class PlanStep(BaseModel):
     """执行步骤"""
@@ -64,7 +57,7 @@ class PlanResponse(BaseModel):
     """执行计划"""
     thoughts: List[str] = Field(description="思考步骤说明")
     steps: List[PlanStep] = Field(description="执行步骤清单")
-    
+
 class SQLResponse(BaseModel):
     """sql response"""
     sql: str

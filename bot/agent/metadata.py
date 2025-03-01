@@ -1,51 +1,59 @@
-import age
-from pydantic import BaseModel, Field
+"""数据治理 元模型
+"""
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import List, Dict
 
+from pydantic import BaseModel, Field
+from bot.graph.age_graph import AGEGraph
 
-class AGEVertex(BaseModel):
+
+class MetaObject(BaseModel):
+    """元对象"""
     id: int
     name: str = Field(description="名称")
     node: str = Field(description="节点类型")
-    
+
     def __eq__(self, other):
-        if isinstance(other, AGEVertex):
+        if isinstance(other, MetaObject):
             return self.id == other.id
         return False
-    
-class Application(AGEVertex):
-    """应用程序"""
-    pass
 
-class BusinessDomain(AGEVertex):
+class Application(MetaObject):
+    """应用程序"""
+
+
+class BusinessDomain(MetaObject):
     """业务域"""
     code: str = Field(description="业务域代码")
 
-class PhysicalTable(AGEVertex):
+class PhysicalTable(MetaObject):
     """物理表"""
     db_schema: str = Field(description="schema")
     full_table_name: str = Field(description="完整表名")
     table_name: str = Field(description="表名")
     columns: List[Dict] = Field(default=None)
 
-class DataEntity(AGEVertex):
+class DataEntity(MetaObject):
     """数据实体"""
     tables: List[PhysicalTable] = []
 
 class RelatedTo(BaseModel):
+    """关联"""
     from_id:int
     to_id:int
     id:int
     rel:str = Field(description="关联", default='')
-    
+
 @dataclass(init=False)
 class MetaFactory:
-    def __init__(self, graph_name:str):
-        self.graph_name = graph_name
+    """元数据工厂"""
+    @abstractmethod
     def fit(self, cell)->bool:
-        pass
+        """判断是否可以转换"""
 
-    def convert(self, cell, conn):
-        pass
 
+
+    @abstractmethod
+    def convert(self, cell, graph:AGEGraph):
+        """转换"""
