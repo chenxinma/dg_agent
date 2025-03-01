@@ -11,8 +11,7 @@ from bot.settings import settings
 from .metadata import AGEVertex
 
 
-GRAPH_NAME = settings.get_setting("age")["graph"]
-DSN = settings.get_setting("age")["dsn"]
+
 
 @dataclass
 class Deps:

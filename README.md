@@ -16,6 +16,20 @@ dg_agent 是一个Python数据治理工具，提供数据治理相关的自动�
 
 笔记：https://www.wolai.com/kJ5LuHxJhnio3wvHDnmSFe
 
+## 元模型结构
+```mermaid
+erDiagram
+      BusinessDomain ||--o{ Application: CONTAINS
+      Application ||--o{ DataEntity : "USES / GENERATES"
+      DataEntity }|..|{ BusinessDomain : BELONGS_TO
+      DataEntity ||--o{ Attribute : HAS_ATTRIBUTE
+      DataEntity ||--|| DataEntity : "FLOWS_TO / RELATED_TO / HAS_PART"
+      DataStandard ||--o{ Attribute: COMPLIES_WITH
+      DataEntity ||--o| PhysicalTable : IMPLEMENTS
+      Attribute ||--o| Column : MAPS_TO
+      PhysicalTable ||--|{ Column : HAS_COLUMN
+```
+
 ## 安装
 
 ### 通过pip安装
