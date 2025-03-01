@@ -1,3 +1,5 @@
+"""问答状态机
+"""
 from __future__ import annotations as _annotations
 
 import json
@@ -9,13 +11,13 @@ from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 import sqlparse
 
 try:
-    from . import (Deps, 
+    from . import (Deps,
                CypherQuery,
-               SQLResponse, 
+               SQLResponse,
                DataGovResponse,
                PlanResponse,
                )
-    from .metadata import *
+    from .metadata import PhysicalTable, DataEntity, RelatedTo
     from .age_cypher_agent import age_agent
     from .sql_agent import sql_agent
     from .plan_agent import plan_agent
@@ -28,6 +30,7 @@ from bot.graph.age_graph import AGEGraph
 
 @dataclass
 class State:
+    """运行状态"""
     question: str
     deps: Deps
     tables: List[PhysicalTable] = field(default=None)
@@ -63,7 +66,7 @@ class StepRunner(BaseNode[State, None, Union[PlanResponse, DataGovResponse, SQLR
             ctx.state.current_step = 0
             ctx.state.tables = []
             ctx.state.rels = []
-        
+
         if ctx.state.current_step < len(ctx.state.plan.steps):
             step = ctx.state.plan.steps[ctx.state.current_step]
             ctx.state.current_step += 1
@@ -83,11 +86,11 @@ class SqlGen(BaseNode[State]):
     """SQL生成
     """
     prompt:str | None = None
-    
+
     async def run(self, ctx: GraphRunContext[State]) -> StepRunner:
-        prompt = "问题:{}\n参考物理表:{}\n物理表关联:{}".format(self.prompt, 
-                                          "\n".join([json.dumps(t, cls=PhysicalTableEncoder) for t in ctx.state.tables]),
-                                          "\n".join([r.rel for r in ctx.state.rels]))
+        prompt = "问题:{}\n参考物理表:{}\n物理表关联:{}".format(self.prompt,
+                    "\n".join([json.dumps(t, cls=PhysicalTableEncoder) for t in ctx.state.tables]),
+                    "\n".join([r.rel for r in ctx.state.rels]))
         result = await sql_agent.run(
             prompt,
             deps=ctx.state.deps,
@@ -95,14 +98,14 @@ class SqlGen(BaseNode[State]):
         ctx.state.agent_messages += result.all_messages()
         result.data.sql = sqlparse.format(result.data.sql, reindent=True, keyword_case='upper')
         return StepRunner(result.data)
- 
- 
+
+
 @dataclass
 class MetaCypherGen(BaseNode[State, Deps, str]):
     """MetaCypherGen 数据元模型查询语句生成
     """
     prompt: str | None = None
-    
+
     async def run(self, ctx: GraphRunContext[State]) -> AgeCypherQuery:
         result = await age_agent.run(
             self.prompt,
@@ -112,16 +115,18 @@ class MetaCypherGen(BaseNode[State, Deps, str]):
         ctx.state.agent_messages += result.all_messages()
         return AgeCypherQuery(result.data)
 
-   
+
 @dataclass
 class AgeCypherQuery(BaseNode[State, None, CypherQuery]):
     """执行AGE的数据元模型查询
     """
     query: CypherQuery
-    
-    def collect_table_defines(self, 
-                              contents: List | DataEntity | PhysicalTable | RelatedTo, 
+
+    def collect_table_defines(self,
+                              contents: List | DataEntity | PhysicalTable | RelatedTo,
                               state:State) -> None:
+        """收集表定义
+        """
         if isinstance(contents, list):
             for element in contents:
                 self.collect_table_defines(element, state)
@@ -142,7 +147,7 @@ class AgeCypherQuery(BaseNode[State, None, CypherQuery]):
         # 如果描述为空，则重新执行Cypher生成
         if result.description is None:
             return MetaCypherGen(prompt=self.query.explanation)
-        
+
         self.collect_table_defines(result.contents, ctx.state)
         return StepRunner(result)
 
@@ -151,7 +156,7 @@ graph = Graph(nodes=(PlanGen, StepRunner, SqlGen, MetaCypherGen, AgeCypherQuery)
 async def do_it(question: str):
     """执行任务"""
     age_graph = AGEGraph(graph_name=settings.get_setting("age")["graph"],
-                        dns=settings.get_setting("age")["dns"])
+                        dsn=settings.get_setting("age")["dsn"])
     state = State(question=question, 
                   deps=Deps(graph=age_graph))
     result, _ = await graph.run(PlanGen(), state=state)

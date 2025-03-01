@@ -98,7 +98,7 @@ class DataEntityMetaFactory(MetaFactory):
         result = graph.query("""
                 MATCH (e:DataEntity)-[:IMPLEMENTS]->(t:PhysicalTable) WHERE ID(e)=%s
                 RETURN t
-            """, entity_id)
+            """, (entity_id, ))
 
         for _r in result:
             t = _r[0]
@@ -152,7 +152,7 @@ class PhysicalTableMetaFactory(MetaFactory):
         result = graph.query("""
                 MATCH (t:PhysicalTable {full_table_name: %s})-[:HAS_COLUMN]->(c:Column)
                 RETURN c
-            """, full_table_name)
+            """, (full_table_name, ))
         columns:List[Dict] = []
 
         for _r in result:
@@ -254,6 +254,7 @@ class MetadataHelper:
             if factory.fit(c):
                 d = factory.convert(c, self.graph)
                 return d
+        return c
 
     def _traverse_age_result(self, contents,
                         resp:DataGovResponse):
@@ -288,9 +289,9 @@ class MetadataHelper:
 
         with logfire.span("Age Query"):
             logfire.info("query: {explanation} {cypher}",
-                        explanation=query.explanation.replace("{", "{{").replace("}", "}}"),
-                        cypher=query.sql.replace("{", "{{").replace("}", "}}"))
-            result = self.graph.query(query.sql)
+                        explanation=query.explanation,
+                        cypher=query.cypher)
+            result = self.graph.query(query.cypher)
 
             resp = DataGovResponse(description=query.explanation)
             self._traverse_age_result(result, resp)

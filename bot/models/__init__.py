@@ -12,6 +12,8 @@ KnownModelName = Literal[
     "ollama:deepseek-r1:8b",
     "bailian:deepseek-v3",
     "bailian:qwen-max-latest",
+    "bailian:qwen-max",
+    "bailian:qwen-coder",
 ]
 
 @dataclass(init=False)

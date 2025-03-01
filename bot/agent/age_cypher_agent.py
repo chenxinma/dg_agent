@@ -28,6 +28,7 @@ DataEntity (数据实体) 的 name 内容都是中文，不做英文翻译。
 """
 
     EXAMPLES = """
+
 ## 示例：
 
 需求：查找属于某个业务域的所有应用程序。
@@ -124,8 +125,7 @@ RETURN path1
         _mode_setting = settings.get_setting("agents")["age_agent"]
 
         def graph_schema(ctx: RunContext[Deps]) -> str:
-            ctx.deps.graph.refresh_schema()
-            return ctx.deps.graph.get_schema()
+            return ctx.deps.graph.schema + AgeAgentFactory.EXAMPLES
 
         agent = Agent(
             models.infer_model(_mode_setting["model_name"], _mode_setting["api_key"]),
@@ -134,7 +134,6 @@ RETURN path1
             result_type=Response,
             system_prompt=(
                 AgeAgentFactory.S_PROMPT,
-                AgeAgentFactory.EXAMPLES,
             ),
         )
 
@@ -142,14 +141,14 @@ RETURN path1
             if isinstance(result, InvalidRequest):
                 return result
             with logfire.span("Validate Age query"):
-                if not result.sql.upper().startswith('MATCH'):
+                if not result.cypher.upper().startswith('MATCH'):
                     raise ModelRetry('请编写一个MATCH的查询。')
 
-                result.sql = result.sql.replace("\\n", "\n")
-                print(result.sql)
+                result.cypher = result.cypher.replace("\\n", "\n")
+                print(result.cypher)
 
                 try:
-                    ctx.deps.graph.explain(result.sql)
+                    ctx.deps.graph.explain(result.cypher)
                 except Exception as e:
                     logfire.warn('错误查询: {e}', e=e)
                     raise ModelRetry(f'错误查询: {e}') from e

@@ -7,11 +7,10 @@ langchain/libs/community/langchain_community/graphs/age_graph.py
 from __future__ import annotations
 
 import re
-import json
-
 from typing import Dict, List, Tuple, Union, Sequence, Any
 
 import age
+import logfire
 
 
 class AGEQueryException(Exception):
@@ -48,17 +47,18 @@ class AGEGraph:
     }
 
     def __init__(
-        self, graph_name: str, dns: str
+        self, graph_name: str, dsn: str
     ) -> None:
         self.graph_name = graph_name
-        self.dns = dns
-        self.age:age.Age = age.connect(graph=graph_name, dsn=dns)
+        self.dsn = dsn
+        self.age:age.Age = age.connect(graph=graph_name, dsn=dsn)
 
         with self.age.connection.cursor() as curs:
             curs.execute(f"""SELECT graphid FROM ag_catalog.ag_graph WHERE name = '{graph_name}'""")
             data = curs.fetchone()
 
-            self.graphid = data.graphid
+            self.graphid = data[0]
+            logfire.info("graphid:{id}", id=self.graphid)
             self.refresh_schema()
 
     @staticmethod
@@ -218,15 +218,12 @@ class AGEGraph:
         """
         获取labels
         """
-        e_labels_records = self.query(
-            """MATCH ()-[e]-() RETURN collect(distinct label(e)) as labels"""
-        )
-        e_labels = e_labels_records[0]["labels"] if e_labels_records else []
-
-        n_labels_records = self.query(
-            """MATCH (n) RETURN collect(distinct label(n)) as labels"""
-        )
-        n_labels = n_labels_records[0]["labels"] if n_labels_records else []
+        with self.age.connection.cursor() as curs:
+            curs.execute(f"""SELECT "name", kind
+                             FROM ag_catalog.ag_label WHERE graph = {self.graphid}""")
+            labels = curs.fetchall()
+            e_labels = [l[0] for l in labels if l[1] == "e"]
+            n_labels = [l[0] for l in labels if l[1] == "v"]
 
         return n_labels, e_labels
 
@@ -267,9 +264,9 @@ class AGEGraph:
                         # strings to python primitives
                         triple_schema.append(
                             {
-                                "start": json.loads(d.f)[0],
-                                "type": json.loads(d.edge),
-                                "end": json.loads(d.t)[0],
+                                "start": d[0][0],
+                                "type": d[1],
+                                "end": d[2][0],
                             }
                         )
                 except age.SqlExecutionError as e:
@@ -336,7 +333,7 @@ class AGEGraph:
                 for d in data:
                     # use json.loads to convert to python
                     # primitive and get readable type
-                    for k, v in json.loads(d.props).items():
+                    for k, v in d[0].items():
                         s.add((k, self.types[type(v).__name__]))
 
                 np = {
@@ -399,7 +396,7 @@ class AGEGraph:
                 for d in data:
                     # use json.loads to convert to python
                     # primitive and get readable type
-                    for k, v in json.loads(d.props).items():
+                    for k, v in d[0].items():
                         s.add((k, self.types[type(v).__name__]))
 
                 np = {
@@ -417,33 +414,35 @@ class AGEGraph:
         n_labels, e_labels = self._get_labels()
         triple_schema = self._get_triples(e_labels)
 
-        node_properties = self._get_node_properties(n_labels)
+        # node_properties = self._get_node_properties(n_labels)
         edge_properties = self._get_edge_properties(e_labels)
 
         # 生成图谱结构描述
-        self.schema = f"""
-        ## 图数据库结构:
-        ### 节属性：
-        {node_properties}
-        ### 关联属性:
-        {edge_properties}
-        节点关联关系:
-        {AGEGraph._format_triples(triple_schema)}
-        """
+        self._schema = f"""
+## 图数据库结构:
+### 节点：
+{n_labels}
+### 关联:
+{e_labels}
+{edge_properties}
+## 节点关联关系:
+{AGEGraph._format_triples(triple_schema)}"""
+        logfire.info("Refresh schema completed.")
 
-        self.structured_schema = {
-            "node_props": {el["labels"]: el["properties"] for el in node_properties},
-            "rel_props": {el["type"]: el["properties"] for el in edge_properties},
-            "relationships": triple_schema,
-            "metadata": {},
-        }
+
+        # self._structured_schema = {
+        #     "node_props": {el["labels"]: el["properties"] for el in node_properties},
+        #     "rel_props": {el["type"]: el["properties"] for el in edge_properties},
+        #     "relationships": triple_schema,
+        #     "metadata": {},
+        # }
 
     @property
-    def get_schema(self) -> str:
+    def schema(self) -> str:
         """Returns the schema of the Graph"""
-        return self.schema
+        return self._schema
 
-    @property
-    def get_structured_schema(self) -> Dict[str, Any]:
-        """Returns the structured schema of the Graph"""
-        return self.structured_schema
+    # @property
+    # def structured_schema(self) -> Dict[str, Any]:
+    #     """Returns the structured schema of the Graph"""
+    #     return self._structured_schema

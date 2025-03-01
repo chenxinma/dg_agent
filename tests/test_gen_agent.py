@@ -1,7 +1,8 @@
+"""图模式运行测试"""
 import asyncio
-from bot.agent.dg_mind import do_it
 
 import logfire
+from bot.agent.dg_mind import do_it
 
 # 配置日志
 logfire.configure(environment='local', send_to_logfire=False)
@@ -19,5 +20,6 @@ logfire.configure(environment='local', send_to_logfire=False)
 #     print(result)
 
 def test_04():
+    """case 4"""
     result = asyncio.run(do_it("列出10个应用"))
     print(result)
