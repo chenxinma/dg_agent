@@ -313,8 +313,9 @@ class PhysicalTableEncoder(json.JSONEncoder):
             str: 如果obj是PhysicalTable类型，返回其DDL语句；否则调用父类方法
         """
         if isinstance(o, PhysicalTable):
-            ddl = f"CREATE TABLE IF NOT EXISTS {o.full_table_name} ("
-            ddl += ',\n'.join([f"`{c['name']}` {c['dtype']}" for c in o.columns])
-            ddl += ");\n"
-            return ddl
+            # ddl = f"CREATE TABLE IF NOT EXISTS {o.full_table_name} ("
+            # ddl += ',\n'.join([f"`{c['name']}` {c['dtype']}" for c in o.columns])
+            # ddl += ");\n"
+            # return ddl
+            return o.model_dump()
         return super().default(o)

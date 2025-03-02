@@ -1,10 +1,13 @@
 """AGEGraph tests"""
 import pytest
 
-# import age
+import logfire
 from bot.graph.age_graph import AGEGraph, AGEQueryException
 
 from bot.settings import settings
+
+# 配置日志
+logfire.configure(environment='local', send_to_logfire=False)
 
 class TestAGEGraph:
     """AGEGraph tests"""
@@ -31,10 +34,20 @@ class TestAGEGraph:
 
     def test_query_with_error(self):
         """错误查询"""
-        with pytest.raises(AGEQueryException, 
+        with pytest.raises(AGEQueryException,
                            match="Error executing graph query: MATCH (n) RETURN n"):
             self.age_graph.query("MATCH (n) RETURN n")
 
     def test_explain(self):
         """执行计划"""
         self.age_graph.explain("MATCH (n) RETURN n")
+
+
+    def test_get_relates(self):
+        """获取relate_to"""
+        result = self.age_graph.query(
+            """MATCH 
+            (e1:DataEntity {name: '资金账户收入流水'})-[r:RELATED_TO*1..3]-(e2:DataEntity {name: '客户账单'})
+            RETURN e1, r, e2""")
+        logfire.info("result: {r}", r=result)
+        assert len(result) == 1

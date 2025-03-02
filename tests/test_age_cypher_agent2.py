@@ -4,7 +4,7 @@
 import asyncio
 import logfire
 from pydantic_ai import UnexpectedModelBehavior, capture_run_messages
-from bot.agent import Deps, CypherQuery
+from bot.agent import CypherQuery
 from bot.agent.age_cypher_agent import age_agent
 from bot.graph.age_graph import AGEGraph
 from bot.agent.metadata_tools import MetadataHelper
@@ -20,10 +20,9 @@ async def bot_call(question: str):
     """
     age_cypher_agent.py 生成Cypher查询
     """
-    deps = Deps(graph=age_graph)
     with capture_run_messages() as messages:
         try:
-            result = await age_agent.run(question, deps=deps)
+            result = await age_agent.run(question, deps=age_graph)
             q:CypherQuery = result.data
 
             resp = metadata_helper.query(q)

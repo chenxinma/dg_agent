@@ -15,11 +15,11 @@ logfire.configure(environment='local', send_to_logfire=False)
 #     result = asyncio.run(do_it("统计客户账单数量"))
 #     print(result)
     
-# def test_03():
-#     result = asyncio.run(do_it("统计本月按结算'客户账单'的收款匹配金额"))
-#     print(result)
-
-def test_04():
-    """case 4"""
-    result = asyncio.run(do_it("列出10个应用"))
+def test_03():
+    result = asyncio.run(do_it("统计本月'资金账户收入流水'匹配'客户账单'的金额"))
     print(result)
+
+# def test_04():
+#     """case 4"""
+#     result = asyncio.run(do_it("列出10个应用"))
+#     print(result)

@@ -1,3 +1,4 @@
+"""SQL生成器"""
 from __future__ import annotations as _annotations
 
 from pydantic_ai import Agent
@@ -25,5 +26,5 @@ class SqlAgentFactory(AgentFactory):
             )
         )
         return agent
-    
+
 sql_agent = SqlAgentFactory.get_agent()

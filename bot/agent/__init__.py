@@ -8,15 +8,6 @@ from annotated_types import MinLen
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from bot.graph import age_graph
-
-
-
-@dataclass
-class Deps:
-    """Agent执行依赖"""
-    graph: age_graph.AGEGraph
-
 
 class CypherQuery(BaseModel):
     """cypher脚本"""

@@ -9,10 +9,11 @@ import logfire
 
 try:
     import bot.models as models
-    from . import Deps, Response, InvalidRequest, AgentFactory
+    from . import Response, InvalidRequest, AgentFactory
 finally:
     pass
 
+from bot.graph.age_graph import AGEGraph
 from bot.settings import settings
 
 
@@ -25,6 +26,7 @@ class AgeAgentFactory(AgentFactory):
 注意:变量名避免使用SQL关键字。
 DataEntity (数据实体) 的 name 内容都是中文，不做英文翻译。
 获取DataEntity (数据实体)的同时获取 RELATED_TO（关联）信息。
+数据实体之间的关系可能是2-3层的间接关联。
 """
 
     EXAMPLES = """
@@ -49,9 +51,9 @@ MATCH (e:DataEntity {name: 'EntityName'})-[r]-(a:Application)
 RETURN a, type(r) as r_name
 -- 替换 EntityName 为目标数据实体的名称。
 
-需求：查找两个数据实体之间的直接连接关系。
+需求：查找两个数据实体之间的连接关系。
 查询：
-MATCH (e1:DataEntity {name: 'Entity1'})-[r:RELATED_TO]->(e2:DataEntity {name: 'Entity2'})
+MATCH (e1:DataEntity {name: 'Entity1'})-[r:RELATED_TO*1..2]->(e2:DataEntity {name: 'Entity2'})
 RETURN e1,r,e2
 -- 替换 Entity1 和 Entity2 为目标数据实体的名称。
 
@@ -66,13 +68,6 @@ RETURN e2
 MATCH (d:BusinessDomain {name: 'DomainName'})-[:CONTAINS]-(a:Application)-[r]-(e:DataEntity)
 RETURN e
 -- 替换 DomainName 为目标业务域的名称。
-
-需求：查找某个数据实体直接或间接连接的所有其他数据实体（递归查询）。
-查询：
-MATCH p = (e1:DataEntity {name: 'EntityName'})-[r:RELATED_TO*1..2]-(e2:DataEntity)
-RETURN e2
--- 替换 EntityName 为目标数据实体的名称。
--- *1.. 表示递归查询，查找直接或间接连接的所有数据实体。
 
 需求：统计某个业务域下所有应用程序的数量
 查询：
@@ -112,32 +107,26 @@ RETURN app, e, t
 MATCH (d:BusinessDomain {name: 'DomainName'})-[:CONTAINS]-(a:Application)-[r]-(e:DataEntity)
 RETURN e
 -- 替换 DomainName 为目标业务域的名称。
-
-需求：查询实体间的多层关联路径
-查询：
-MATCH path1 = (e1:DataEntity {name: 'EntityName'})-[r:RELATED_TO*1..3]-(e2:DataEntity)
-RETURN path1
--- 替换 EntityName 为目标数据实体的名称。
     """
 
     @staticmethod
     def get_agent() -> Agent:
         _mode_setting = settings.get_setting("agents")["age_agent"]
 
-        def graph_schema(ctx: RunContext[Deps]) -> str:
-            return ctx.deps.graph.schema + AgeAgentFactory.EXAMPLES
+        def graph_schema(ctx: RunContext[AGEGraph]) -> str:
+            return ctx.deps.schema + AgeAgentFactory.EXAMPLES
 
         agent = Agent(
             models.infer_model(_mode_setting["model_name"], _mode_setting["api_key"]),
             model_settings={'temperature': 0.0},
-            deps_type=Deps,
+            deps_type=AGEGraph,
             result_type=Response,
             system_prompt=(
                 AgeAgentFactory.S_PROMPT,
             ),
         )
 
-        async def validate_result(ctx: RunContext[Deps], result: Response) -> Response:
+        async def validate_result(ctx: RunContext[AGEGraph], result: Response) -> Response:
             if isinstance(result, InvalidRequest):
                 return result
             with logfire.span("Validate Age query"):
@@ -148,12 +137,12 @@ RETURN path1
                 print(result.cypher)
 
                 try:
-                    ctx.deps.graph.explain(result.cypher)
+                    ctx.deps.explain(result.cypher)
                 except Exception as e:
                     logfire.warn('错误查询: {e}', e=e)
                     raise ModelRetry(f'错误查询: {e}') from e
-                else:
-                    return result
+
+                return result
 
         agent.result_validator(validate_result)
         agent.system_prompt(graph_schema)

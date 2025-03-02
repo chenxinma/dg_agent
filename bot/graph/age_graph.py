@@ -46,20 +46,24 @@ class AGEGraph:
         "bool": "BOOLEAN",
     }
 
+    def _get_age(self) -> age.Age:
+        return age.connect(graph=self.graph_name, dsn=self.dsn)
+
     def __init__(
         self, graph_name: str, dsn: str
     ) -> None:
         self.graph_name = graph_name
         self.dsn = dsn
-        self.age:age.Age = age.connect(graph=graph_name, dsn=dsn)
+        
 
-        with self.age.connection.cursor() as curs:
+        with self._get_age().connection.cursor() as curs:
             curs.execute(f"""SELECT graphid FROM ag_catalog.ag_graph WHERE name = '{graph_name}'""")
             data = curs.fetchone()
 
             self.graphid = data[0]
             logfire.info("graphid:{id}", id=self.graphid)
-            self.refresh_schema()
+
+        self.refresh_schema()
 
     @staticmethod
     def _format_triples(triples: List[Dict[str, str]]) -> List[str]:
@@ -189,14 +193,15 @@ class AGEGraph:
         _wrap_query = AGEGraph._wrap_query(query, self.graph_name)
 
         # execute the query, rolling back on an error
-        with self.age.connection.cursor() as curs:
+        _age = self._get_age()
+        with _age.connection.cursor() as curs:
             try:
                 if params is None:
                     curs.execute(_wrap_query)
                 else:
                     curs.execute(_wrap_query, params)
             except age.SqlExecutionError as e:
-                self.age.rollback()
+                _age.rollback()
                 raise AGEQueryException(
                     {
                         "message": f"Error executing graph query: {query}",
@@ -211,14 +216,14 @@ class AGEGraph:
         执行查询计划 验证SQL
         """
         _wrap_query = "EXPLAIN " + AGEGraph._wrap_query(query, self.graph_name)
-        with self.age.connection.cursor() as curs:
+        with self._get_age().connection.cursor() as curs:
             curs.execute(_wrap_query)
 
     def _get_labels(self) -> Tuple[List[str], List[str]]:
         """
         获取labels
         """
-        with self.age.connection.cursor() as curs:
+        with self._get_age().connection.cursor() as curs:
             curs.execute(f"""SELECT "name", kind
                              FROM ag_catalog.ag_label WHERE graph = {self.graphid}""")
             labels = curs.fetchall()
@@ -253,7 +258,7 @@ class AGEGraph:
         triple_schema = []
 
         # iterate desired edge types and add distinct relationship types to result
-        with self.age.connection.cursor() as curs:
+        with self._get_age().connection.cursor() as curs:
             for label in e_labels:
                 q = triple_query.format(graph_name=self.graph_name, e_label=label)
                 try:
@@ -311,7 +316,7 @@ class AGEGraph:
         """
 
         node_properties = []
-        with self.age.connection.cursor() as curs:
+        with self._get_age().connection.cursor() as curs:
             for label in n_labels:
                 q = node_properties_query.format(
                     graph_name=self.graph_name, n_label=label
@@ -374,7 +379,7 @@ class AGEGraph:
         $$) AS (props agtype);
         """
         edge_properties = []
-        with self.age.connection.cursor() as curs:
+        with self._get_age().connection.cursor() as curs:
             for label in e_labels:
                 q = edge_properties_query.format(
                     graph_name=self.graph_name, e_label=label

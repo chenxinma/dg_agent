@@ -18,11 +18,13 @@ class PlanAgentFactory(AgentFactory):
             model_settings={'temperature': 0.0},
             result_type=PlanResponse,
             system_prompt=(
-                "步骤 *age_agent* : 将问题提供给此步骤可以生成查询。 此步骤可以查询 数据实体、物理表、应用程序、业务域、数据实体间关联的属性。",
-                "步骤 *sql_agent* : 根据提供的PhysicalTable (物理表)和RELATED_TO的关联的定义生成SQL",
-                "根据用户问题做编排合理的步骤执行计划。",
+                "步骤 *age_agent* : 将问题提供给此步骤可以生成查询。 此步骤可以查询以下种类的元数据定义：数据实体、物理表、应用程序、业务域、数据实体间关联的属性。",
+                "步骤 *sql_agent* : 根据提示词里的参考物理表和物理表关联定义生成SQL",
+                """根据用户问题做编排合理的步骤执行计划。
+                执行说明：
+                  如果问题是关于统计、查询的逻辑，请按照age_agent->sql_agent的顺序生成SQL。
+                  age_agent步骤获得所需的数据实体信息和关联属性，sql_agent步骤根据age_agent步骤生成的SQL执行。""",
                 "**约束：**: 仅生成执行计划，不做实际工具的执行。"
-                "**约束：**: 执行sql_agent前需要先执行age_agent获得PhysicalTable和RELATED_TO的定义。"
             ),
         )
         return agent
