@@ -8,6 +8,7 @@ GRAPH_NAME = settings.get_setting("age")["graph"]
 DSN = settings.get_setting("age")["dsn"]
 
 class ConceptModel:
+    """概念模型"""
     def __init__(self, id, name, x, y, w, h):
         self.name = name
         self.id = id
@@ -18,8 +19,8 @@ class ConceptModel:
 
     @staticmethod
     def load(xml_root) -> list:
-        pass
-    
-    
+        """读取设计稿"""
+
 def generate_unique_id(name):
+    """生成唯一id"""
     return hashlib.sha256(name.encode()).hexdigest()

@@ -5,8 +5,7 @@ import json
 import click
 import age
 from tqdm import tqdm
-
-from bot.agent import GRAPH_NAME, DSN
+from . import GRAPH_NAME, DSN
 
 def sql_decode(s):
     """
@@ -20,6 +19,7 @@ def main(fname:str=None):
     """
     加载数据实体关联信息
     """
+
     print("加载数据实体关联信息")
     ag = age.connect(graph=GRAPH_NAME, dsn=DSN)
     conn = ag.connection

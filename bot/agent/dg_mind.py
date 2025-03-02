@@ -5,7 +5,7 @@ from __future__ import annotations as _annotations
 import json
 from dataclasses import dataclass, field
 from typing import List, Union
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
 import sqlparse
@@ -64,7 +64,6 @@ class PlanGen(BaseNode[State]):
     async def run(self, ctx: GraphRunContext[State]) -> StepRunner:
         result = await plan_agent.run(
             ctx.state.question,
-            message_history=ctx.state.agent_messages,
         )
         return StepRunner(result.data) # 启动计划执行
 
@@ -166,8 +165,11 @@ class CypherExecutor(BaseNode[State, None, CypherQuery]):
         if result.description is None:
             return MetaCypherGen(prompt=self.query.explanation)
 
-        self.collect_table_defines(result.contents, ctx.state)
-        return StepRunner(result)
+        if len(result.contents) > 0:
+            self.collect_table_defines(result.contents, ctx.state)
+            return StepRunner(result)
+        else:
+            return MetaCypherGen(prompt="未能获得内容请重新生成。" + self.query.explanation)
 
 graph = Graph(nodes=(PlanGen, StepRunner, SqlGen, MetaCypherGen, CypherExecutor))
 
@@ -177,7 +179,11 @@ async def do_it(question: str):
                       dsn=settings.get_setting("age")["dsn"])
     state = State(question=question,
                   metadata_graph=_metadata_graph)
+
     result, _ = await graph.run(PlanGen(), state=state)
+    # for msg in state.agent_messages:
+    #     if isinstance(msg, ModelResponse):
+    #         print(msg)
     return result
 
 def to_marimo():

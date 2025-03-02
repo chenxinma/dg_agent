@@ -10,12 +10,13 @@ logfire.configure(environment='local', send_to_logfire=False)
 # def test_01():
 #     result = asyncio.run(do_it("客户账单 这个数据实体 连接的数据实体有哪些？"))
 #     print(result)
-    
+
 # def test_02():
 #     result = asyncio.run(do_it("统计客户账单数量"))
 #     print(result)
-    
+
 def test_03():
+    """case 3"""
     result = asyncio.run(do_it("统计本月'资金账户收入流水'匹配'客户账单'的金额"))
     print(result)
 

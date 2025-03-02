@@ -134,7 +134,6 @@ RETURN e
                     raise ModelRetry('请编写一个MATCH的查询。')
 
                 result.cypher = result.cypher.replace("\\n", "\n")
-                print(result.cypher)
 
                 try:
                     ctx.deps.explain(result.cypher)
