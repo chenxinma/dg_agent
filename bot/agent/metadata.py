@@ -38,6 +38,10 @@ class DataEntity(MetaObject):
     """数据实体"""
     tables: List[PhysicalTable] = []
 
+class Column(MetaObject):
+    """列"""
+    dtype: str = Field(description="数据类型")
+
 class RelatedTo(BaseModel):
     """关联"""
     from_id:int
@@ -52,8 +56,6 @@ class MetaFactory:
     def fit(self, cell)->bool:
         """判断是否可以转换"""
 
-
-
     @abstractmethod
-    def convert(self, cell, graph:AGEGraph):
+    def convert(self, cell, graph:AGEGraph) -> MetaObject | BaseModel:
         """转换"""

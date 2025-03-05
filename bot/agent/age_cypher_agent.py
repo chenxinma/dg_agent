@@ -27,6 +27,7 @@ class AgeAgentFactory(AgentFactory):
 DataEntity (数据实体) 的 name 内容都是中文，不做英文翻译。
 获取DataEntity (数据实体)的同时获取 RELATED_TO（关联）信息。
 数据实体之间的关系可能是2-3层的间接关联。
+禁止查询结果直接返回 Column 粒度的信息。
 """
 
     EXAMPLES = """
@@ -116,6 +117,12 @@ RETURN e
         def graph_schema(ctx: RunContext[AGEGraph]) -> str:
             return ctx.deps.schema + AgeAgentFactory.EXAMPLES
 
+        def _wrap_cypher(cypher: str) -> str:
+            c = cypher.replace("\\n", "\n")
+            if c.endswith(";"):
+                c = c[:-1]
+            return c
+
         agent = Agent(
             models.infer_model(_mode_setting["model_name"], _mode_setting["api_key"]),
             model_settings={'temperature': 0.0},
@@ -133,8 +140,7 @@ RETURN e
                 if not result.cypher.upper().startswith('MATCH'):
                     raise ModelRetry('请编写一个MATCH的查询。')
 
-                result.cypher = result.cypher.replace("\\n", "\n")
-
+                result.cypher = _wrap_cypher(result.cypher)
                 try:
                     ctx.deps.explain(result.cypher)
                 except Exception as e:

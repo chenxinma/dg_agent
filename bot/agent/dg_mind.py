@@ -5,7 +5,7 @@ from __future__ import annotations as _annotations
 import json
 from dataclasses import dataclass, field
 from typing import List, Union
-from pydantic_ai.messages import ModelMessage, ModelResponse
+from pydantic_ai.messages import ModelMessage
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
 import sqlparse
@@ -91,10 +91,7 @@ class StepRunner(BaseNode[State, None, Union[PlanResponse, DataGovResponse, SQLR
             elif "age_agent" == step.tool:
                 return MetaCypherGen(prompt=step.prompt)
         else:
-            if isinstance(self.response, SQLResponse):
-                return End(self.response.sql) # SQL
-            else:
-                return End(self.response) # 最后一次的步骤结果
+            return End(self.response) # 最后一次的步骤结果
 
 
 @dataclass
@@ -161,6 +158,7 @@ class CypherExecutor(BaseNode[State, None, CypherQuery]):
     ) -> MetaCypherGen | StepRunner:
         metadata_helper : MetadataHelper = MetadataHelper(ctx.state.metadata_graph)
         result:DataGovResponse = metadata_helper.query(self.query)
+
         # 如果描述为空，则重新执行Cypher生成
         if result.description is None:
             return MetaCypherGen(prompt=self.query.explanation)

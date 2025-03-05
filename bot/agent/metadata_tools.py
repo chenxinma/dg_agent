@@ -13,7 +13,8 @@ try:
                            DataEntity,
                            BusinessDomain,
                            RelatedTo,
-                           Application)
+                           Application,
+                           Column)
     from . import (
                CypherQuery,
                DataGovResponse
@@ -161,6 +162,35 @@ class PhysicalTableMetaFactory(MetaFactory):
             columns.append(d)
         return columns
 
+
+class ColumnMetaFactory(MetaFactory):
+    """列元模型工厂类，用于处理Column类型顶点"""
+    def fit(self, cell)->bool:
+        """判断单元格是否为Column类型的顶点
+        
+        Args:
+            cell: 待判断的单元（顶点或边）
+            
+        Returns:
+            bool: 如果cell是Column类型的顶点返回True，否则False
+        """
+        return isinstance(cell, age.models.Vertex) and cell.label == "Column"
+
+    def convert(self, cell, graph:AGEGraph):
+        """将Column顶点转换为列元模型对象
+        
+        Args:
+            cell: Column顶点
+            graph: AGEGraph实例
+            
+        Returns:
+            Column: 列元模型对象
+        """
+        return Column(id=cell.id,
+                      name=cell.properties["name"],
+                      dtype=cell.properties["dtype"],
+                      node=cell.label)
+
 class OtherMetaFactory(MetaFactory):
     """其他元模型工厂类，用于处理未特殊处理的顶点类型"""
 
@@ -254,10 +284,12 @@ class MetadataHelper:
             if factory.fit(c):
                 d = factory.convert(c, self.graph)
                 return d
-        return c
+            
+        print("No implemented.", c)
+        return str(c)
 
     def _traverse_age_result(self, contents,
-                        resp:DataGovResponse):
+                             metaobj_list:list):
         """遍历AGE查询结果提取元模型对象
         
         Args:
@@ -274,7 +306,7 @@ class MetadataHelper:
                 else:
                     d = self._convert_age2model(cell)
                     _row.append(d)
-            resp.contents.append(_row)
+            metaobj_list.append(_row)
 
 
     def query(self, query: CypherQuery)-> DataGovResponse:
@@ -293,10 +325,11 @@ class MetadataHelper:
                         cypher=query.cypher)
             result = self.graph.query(query.cypher)
 
-            resp = DataGovResponse(description=query.explanation)
-            self._traverse_age_result(result, resp)
+            collect_metaobjs = []
+            self._traverse_age_result(result, collect_metaobjs)
+            resp = DataGovResponse(description=query.explanation, contents=collect_metaobjs)
 
-            logfire.info("result contents: {cnt} ", cnt=len(resp.contents))
+            logfire.info("result contents: {cnt} ", cnt=len(resp["contents"]))
             return resp
 
 
@@ -317,5 +350,5 @@ class PhysicalTableEncoder(json.JSONEncoder):
             # ddl += ',\n'.join([f"`{c['name']}` {c['dtype']}" for c in o.columns])
             # ddl += ");\n"
             # return ddl
-            return o.model_dump()
+            return o.__dict__
         return super().default(o)
