@@ -265,6 +265,7 @@ class MetadataHelper:
         BusinessDomainMetaFactory(),
         DataEntityMetaFactory(),
         PhysicalTableMetaFactory(),
+        ColumnMetaFactory(),
         OtherMetaFactory(),
         RelatedToMetaFactory()
     ] # 元模型工厂列表
@@ -284,8 +285,8 @@ class MetadataHelper:
             if factory.fit(c):
                 d = factory.convert(c, self.graph)
                 return d
-            
-        print("No implemented.", c)
+        if not isinstance(c, str) and not isinstance(c, int):
+            print("No implemented.", c)
         return str(c)
 
     def _traverse_age_result(self, contents,

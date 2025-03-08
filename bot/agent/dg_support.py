@@ -121,11 +121,10 @@ class DataGovSupportAgentFactory(AgentFactory):
 
             return result
         
-        def sql_validate(ctx: RunContext[AGEGraph], sql: str) -> SQLResponse:
+        def sql_validate(sql: str) -> SQLResponse:
             """SQL query executor
             
             Args:
-                ctx: The agent context.
                 sql: 根据物理表和关联生成的SQL
             """
             # vaildate sql
@@ -157,7 +156,7 @@ class DataGovSupportAgentFactory(AgentFactory):
 
         agent.system_prompt(get_graph_schema)
         agent.tool(cypher_query, require_parameter_descriptions=True)
-        agent.tool(sql_validate, require_parameter_descriptions=True)
+        agent.tool_plain(sql_validate, require_parameter_descriptions=True)
 
         return agent
 
