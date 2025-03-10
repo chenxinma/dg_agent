@@ -284,7 +284,9 @@ class MetadataHelper:
             if factory.fit(c):
                 d = factory.convert(c, self.graph)
                 return d
-            
+        if isinstance(c, str):
+            return c
+
         print("No implemented.", c)
         return str(c)
 

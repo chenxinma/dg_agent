@@ -24,10 +24,18 @@ from bot.settings import settings
 SupportResponse: TypeAlias = Union[InvalidRequest, SQLResponse, DataGovResponse]
 
 _EXAMPLES = """
+## 参考以下示例生成Cypher查询语句。
+
 需求：查询某个数据实体对应的物理表
 查询：
 MATCH (e:DataEntity {name: 'EntityName'})-[:IMPLEMENTS]->(t:PhysicalTable)
 RETURN e, t
+-- 替换 EntityName 为目标数据实体的名称。
+
+需求：查找与某个数据实体对应的物理表名称
+查询：
+MATCH (e:DataEntity {name: 'EntityName'})-[:IMPLEMENTS]->(t:PhysicalTable)
+RETURN t.full_table_name as full_table_name
 -- 替换 EntityName 为目标数据实体的名称。
 
 需求：查询两个关联实体及其物理表
@@ -120,22 +128,22 @@ class DataGovSupportAgentFactory(AgentFactory):
                 result:DataGovResponse = metadata_helper.query(query)
 
             return result
-        
-        def sql_validate(ctx: RunContext[AGEGraph], sql: str) -> SQLResponse:
+
+        def sql_validate(sql: str) -> SQLResponse:
             """SQL query executor
             
             Args:
-                ctx: The agent context.
                 sql: 根据物理表和关联生成的SQL
             """
             # vaildate sql
             with logfire.span("Validate SQL"):
                 _wrap_sql = sqlparse.format(sql, reindent=True, keyword_case='upper')
-                
+
             return SQLResponse(sql=_wrap_sql)
 
         def get_graph_schema(ctx: RunContext[AGEGraph]) -> str:
-            return ctx.deps.schema + "\n" + _EXAMPLES
+            return ctx.deps.schema + \
+                  "\n" + _EXAMPLES
 
 
         agent = Agent(
@@ -146,18 +154,19 @@ class DataGovSupportAgentFactory(AgentFactory):
             system_prompt=(
                 "你是一个数据治理知识支持助手。"
                 "你可以根据下面给定的图数据架构生成Cyher查询语句。"
-                "你会被问及关于这个图数据中关于业务域、应用、数据实体、物理表和数据实体间的关联（RELATE_TO）相关问题，" +
-                " 此时可以通过使用'cypher_query'工具执行Cypher获得结果直接反馈。cypher_query的返回值DataGovResponse里面会包含 contents（业务域、应用、数据实体、物理表等元模型对象集合）和 description 查询结果描述。"
-                "你会被问数据统计查询相关的问题，可以通过'cypher_query'工具获得物理表的定义，然后根据物理表定义来编写SQL查询，" +
+                "+ 你会被问及关于这个图数据中关于业务域、应用、数据实体、物理表和数据实体间的关联（RELATE_TO）相关问题，" +
+                " 此时可以通过使用'cypher_query'工具执行Cypher获得结果直接反馈。",
+                "+ 你会被问数据统计查询相关的问题，可以通过'cypher_query'工具获得物理表的定义(获得的物理表内包含表名、列信息，不需要额外获取)，然后根据物理表定义来编写SQL查询，" +
                 " 此时可以通过'sql_validate'验证生成的SQL是否正确。",
                 "注意：请不要使用'cypher_query'工具执行SQL查询。",
-                "注意：对name属性的查询不要翻译。",
+                "注意：对name属性的查询例如数据实体名、应用名、业务域名等，不要翻译。",
+                "注意：工具使用后的结果应组织成合适的MarkDown文本格式回复。",
             )
         )
 
         agent.system_prompt(get_graph_schema)
         agent.tool(cypher_query, require_parameter_descriptions=True)
-        agent.tool(sql_validate, require_parameter_descriptions=True)
+        agent.tool_plain(sql_validate, require_parameter_descriptions=True)
 
         return agent
 
