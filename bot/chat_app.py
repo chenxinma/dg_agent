@@ -8,12 +8,12 @@ from typing import Annotated, Literal
 from contextlib import asynccontextmanager
 import fastapi
 from fastapi import Depends, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from typing_extensions import TypedDict
 
 import logfire
-from pydantic import ValidationError
+from pydantic_ai import Agent
 from pydantic_ai.usage import UsageLimits
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import (
@@ -22,7 +22,12 @@ from pydantic_ai.messages import (
     ModelResponse,
     TextPart,
     UserPromptPart,
+    PartDeltaEvent,
+    TextPartDelta,
+    FunctionToolResultEvent,
+    FunctionToolCallEvent
 )
+
 from bot.agent.dg_support import dg_support_agent
 from bot.graph.age_graph import AGEGraph
 from bot.settings import settings
@@ -35,7 +40,8 @@ origins = [
     "*"
 ]
 
-THIS_DIR = Path(__file__).parent
+# THIS_DIR = Path(__file__).parent
+THIS_DIR = Path(r"D:\Work\python\dg_agent\bot\web")
 usage_limits = UsageLimits(request_limit=10)
 
 @asynccontextmanager
@@ -47,6 +53,7 @@ async def lifespan(_app: fastapi.FastAPI):
     yield {'metadata_graph': _metadata_graph}
 
 app = fastapi.FastAPI(lifespan=lifespan)
+logfire.instrument_fastapi(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -56,6 +63,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get('/')
+async def index() -> FileResponse:
+    return FileResponse((THIS_DIR / 'chat_app.html'), media_type='text/html')
+
+
+@app.get('/chat_app.ts')
+async def main_ts() -> FileResponse:
+    """Get the raw typescript code, it's compiled in the browser, forgive me."""
+    return FileResponse((THIS_DIR / 'chat_app.ts'), media_type='text/plain')
+
+@app.get('/chat/')
+async def get_chat() -> Response:    
+    return Response(
+        b'\n',
+        media_type='text/plain',
+    )
 
 class ChatMessage(TypedDict):
     """Format of messages sent to the browser."""
@@ -86,11 +109,6 @@ def to_chat_message(m: ModelMessage) -> ChatMessage:
             }
     raise UnexpectedModelBehavior(f'Unexpected message type for chat app: {m}')
 
-# _mode_setting = settings.get_setting("agents")["chat_agent"]
-# agent = Agent(models.infer_model(_mode_setting["model_name"], _mode_setting["api_key"]),
-#               result_type=str,
-#               system_prompt="根据问题和查询结果，用中文回答做简单表述以Markdown格式输出。不要额外增加不存在的内容。查询结果如果包含SQL则直接返回SQL。",)
-
 
 async def get_graph(request: Request) -> AGEGraph:
     """get the metadata graph"""
@@ -111,16 +129,58 @@ async def post_chat(
                 {
                     'role': 'user',
                     'timestamp': datetime.now(tz=timezone.utc).isoformat(),
-                    'content': "内部查询中...",
+                    'content': prompt,
                 }
             ).encode('utf-8')
             + b'\n'
         )
         # SupportResponse
-        result = await dg_support_agent.run(prompt, deps=metadata_graph)
-        m = ModelResponse(parts=[TextPart(result.data)], 
-                          timestamp=datetime.now(tz=timezone.utc).isoformat())
-        yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
+        async with dg_support_agent.iter(prompt, deps=metadata_graph) as run:
+            output_messages: list[str] = []
+            _timestamp = datetime.now(tz=timezone.utc).isoformat()
+            async for node in run:
+                if Agent.is_model_request_node(node):
+                    async with node.stream(run.ctx) as request_stream:
+                        async for event in request_stream:
+                            if isinstance(event, PartDeltaEvent):
+                                if isinstance(event.delta, TextPartDelta):
+                                    output_messages.append(event.delta.content_delta)
+                                    m = ModelResponse(parts=[
+                                        TextPart("".join(output_messages))],
+                                        timestamp=_timestamp)
+                                    yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
+                elif Agent.is_call_tools_node(node):
+                    # A handle-response node => The model returned some data,
+                    # potentially calls a tool
+                    async with node.stream(run.ctx) as handle_stream:
+                        async for event in handle_stream:
+                            if isinstance(event, FunctionToolCallEvent):
+                                output_messages.append(f'\n\n [Tools] {event.part.tool_name!r} 开始 ID={event.part.tool_call_id!r} \n\n')
+                                m = ModelResponse(parts=[
+                                        TextPart("".join(output_messages))],
+                                        timestamp=_timestamp)
+                                yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
+                            elif isinstance(event, FunctionToolResultEvent):
+                                output_messages.append(
+                                    f'[Tools] ID={event.tool_call_id!r} 完成。 {str(event.result.content)[:30]} \n\n'
+                                )
+                                m = ModelResponse(parts=[
+                                        TextPart("".join(output_messages))],
+                                        timestamp=_timestamp)
+                                yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
+                # elif Agent.is_end_node(node):
+                #     assert run.result.data == node.data.data
+                #     # Once an End node is reached, the agent run is complete
+                #     m = ModelResponse(parts=[
+                #         TextPart(run.result.data)],
+                #         timestamp=datetime.now(tz=timezone.utc).isoformat())
+                #     yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
+
+
+        # result = await dg_support_agent.run(prompt, deps=metadata_graph)
+        # m = ModelResponse(parts=[TextPart(result.data)], 
+        #                   timestamp=datetime.now(tz=timezone.utc).isoformat())
+        # yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
 
         # async with dg_support_agent.run_stream(
         #     prompt, deps=metadata_graph
