@@ -1,27 +1,24 @@
 """物理模型导入图数据库
 """
+from pathlib import Path
 import os
-import sys
-import click
 import age
-try:
-    import pandas as pd
-except ImportError:
-    print("Pandas is not installed. Please install it using 'pip install pandas'.")
-    sys.exit(1)
+import pandas as pd
 
 from tqdm import tqdm
 from . import GRAPH_NAME, DSN, generate_unique_id
 
+SCRIPT_PAHT = Path(__file__).parent
+
 class MetadataSturture:
     """构建元模型 物理表、列"""
 
-    def __init__(self, metadatas:dict, df_columns:pd.DataFrame):
-        self._db_set = metadatas
+    def __init__(self, df_entities:pd.DataFrame, df_columns:pd.DataFrame):
+        self._df_entities = df_entities
         self._df_columns = df_columns
 
     def save_columns(self, cursor, full_table_name):
-        """保持列"""
+        """保存列"""
         _df = self._df_columns[self._df_columns['Table'] == full_table_name]
         for row in _df.itertuples():
             nid = generate_unique_id(full_table_name +"."+ row.Column)
@@ -44,30 +41,32 @@ class MetadataSturture:
         conn_1 = ag.connection
         with conn_1.cursor() as _cursor:
             for row in tqdm(db.itertuples(), total=db.shape[0]):
+                _full_table_name = f"{row.schema}.{row.table_name}"
+                _entity_name = row.name
+
                 _cursor.execute('''SELECT * from cypher(%s, $$
                     CREATE (n:PhysicalTable {name: %s, table_name: %s, schema: %s, full_table_name: %s}) 
                     $$) as (v agtype); ''', (GRAPH_NAME,
-                                            row.entity,
+                                            _entity_name,
                                             row.table_name,
                                             row.schema,
-                                            row.full_table_name))
+                                            _full_table_name))
 
                 _cursor.execute('''SELECT * from cypher(%s, $$
-                    MATCH (a:DataEntity), (b:PhysicalTable)
-                    WHERE a.nid = %s AND b.full_table_name = %s
-                    CREATE (a)-[e:IMPLEMENTS]->(b)
-                    RETURN e
-                    $$) as (e agtype); ''',
-                    (GRAPH_NAME, row.nid, row.full_table_name))
+                    MATCH (a:Application {name: %s} )-[r]->(e:DataEntity {name: %s}), (b:PhysicalTable)
+                    WHERE b.full_table_name = %s
+                    CREATE (e)-[i:IMPLEMENTS]->(b)
+                    RETURN i
+                    $$) as (i agtype); ''',
+                    (GRAPH_NAME, row.app_name, _entity_name, _full_table_name))
 
-                self.save_columns(_cursor, row.full_table_name)
+                self.save_columns(_cursor, _full_table_name)
 
         ag.commit()
 
     def make_graph(self, ag):
         """构建物理模型"""
-        for db in self._db_set.values():
-            self.save_tables(ag, db)
+        self.save_tables(ag, self._df_entities)
 
 def clear_graph(ag):
     """清除图数据库"""
@@ -83,20 +82,12 @@ def clear_graph(ag):
         $$) as (v agtype); ''', (GRAPH_NAME,))
     ag.commit()
 
-@click.command()
-@click.argument('fname', type=click.Path(exists=True))
-def main(fname:str=None):
+def main():
     """
-    从 fname 文件中读取元数据，并构建物理模型
+    加载数据实体-物理表
     """
-    print("Starting...")
-    print(f"Reading file:{fname}")
-    metadatas = pd.read_excel(fname, sheet_name=None)
-
-    # 获取 fname 所在的目录
-    fname_dir = os.path.dirname(fname)
     # 构建 db 目录的路径
-    db_dir = os.path.join(fname_dir, "db")
+    db_dir = SCRIPT_PAHT / "files/db"
     # 检查 db 目录是否存在
     if not os.path.exists(db_dir):
         print(f"db 目录不存在: {db_dir}")
@@ -104,16 +95,20 @@ def main(fname:str=None):
 
     # 列出 db 目录下所有 .xlsx 文件
     xlsx_files = [f for f in os.listdir(db_dir) if f.endswith('.xlsx')]
+    df_all_entities = pd.DataFrame()
     df_all_columns = pd.DataFrame()
     for f in xlsx_files:
         df = pd.read_excel(os.path.join(db_dir, f), sheet_name="Columns")
         df_all_columns = pd.concat([df_all_columns, df])
 
+        df_entity = pd.read_excel(os.path.join(db_dir, f), sheet_name="Entities")
+        df_all_entities = pd.concat([df_all_entities, df_entity])
+
     print(f"Save to -> {GRAPH_NAME}")
     ag = age.connect(graph=GRAPH_NAME, dsn=DSN)
     clear_graph(ag)
 
-    ms = MetadataSturture(metadatas, df_all_columns)
+    ms = MetadataSturture(df_all_entities, df_all_columns)
     ms.make_graph(ag)
 
 if __name__ == '__main__':

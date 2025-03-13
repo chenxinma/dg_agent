@@ -40,8 +40,7 @@ origins = [
     "*"
 ]
 
-# THIS_DIR = Path(__file__).parent
-THIS_DIR = Path(r"D:\Work\python\dg_agent\bot\web")
+WEBROOT_DIR = Path(__file__).parent.joinpath('web')
 usage_limits = UsageLimits(request_limit=10)
 
 @asynccontextmanager
@@ -65,16 +64,21 @@ app.add_middleware(
 
 @app.get('/')
 async def index() -> FileResponse:
-    return FileResponse((THIS_DIR / 'chat_app.html'), media_type='text/html')
+    """显示对话主页面"""
+    return FileResponse((WEBROOT_DIR / 'chat_app.html'), media_type='text/html')
 
 
 @app.get('/chat_app.ts')
 async def main_ts() -> FileResponse:
-    """Get the raw typescript code, it's compiled in the browser, forgive me."""
-    return FileResponse((THIS_DIR / 'chat_app.ts'), media_type='text/plain')
+    """对话交互Typescript脚本"""
+    return FileResponse((WEBROOT_DIR / 'chat_app.ts'), media_type='text/plain')
 
 @app.get('/chat/')
-async def get_chat() -> Response:    
+async def get_chat() -> Response:
+    """
+    返回历史对话数据 :TODO
+    """
+    logfire.info('get_chat')
     return Response(
         b'\n',
         media_type='text/plain',
@@ -155,7 +159,9 @@ async def post_chat(
                     async with node.stream(run.ctx) as handle_stream:
                         async for event in handle_stream:
                             if isinstance(event, FunctionToolCallEvent):
-                                output_messages.append(f'\n\n [Tools] {event.part.tool_name!r} 开始 ID={event.part.tool_call_id!r} \n\n')
+                                output_messages.append(
+                                    f'\n\n [Tools] {event.part.tool_name!r} 开始 ID={event.part.tool_call_id!r} \n\n'
+                                )
                                 m = ModelResponse(parts=[
                                         TextPart("".join(output_messages))],
                                         timestamp=_timestamp)
@@ -196,5 +202,5 @@ async def post_chat(
 if __name__ == '__main__':
     import uvicorn
     uvicorn.run(
-        'bot.chat_app:app', reload=True, reload_dirs=[str(THIS_DIR)]
+        'bot.chat_app:app',
     )

@@ -6,7 +6,7 @@ settings.yaml
 
 build
 dist
-graph/files/*
+make_graph/files/*
 
 sql_lab.py
 
