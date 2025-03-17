@@ -6,6 +6,7 @@ from typing import List, Any, Dict
 
 import age
 import logfire
+from cachetools import TTLCache, cachedmethod
 
 try:
     from .metadata import (MetaFactory,
@@ -23,6 +24,7 @@ finally:
     pass
 
 from bot.graph.age_graph import AGEGraph
+
 
 class BusinessDomainMetaFactory(MetaFactory):
     """业务领域元模型工厂类，用于处理BusinessDomain类型顶点"""
@@ -52,6 +54,7 @@ class BusinessDomainMetaFactory(MetaFactory):
                         name=cell.properties["name"],
                         node=cell.label,
                         code=cell.properties["code"])
+
 
 class DataEntityMetaFactory(MetaFactory):
     """数据实体元模型工厂类，用于处理DataEntity类型顶点"""
@@ -95,17 +98,16 @@ class DataEntityMetaFactory(MetaFactory):
             List[PhysicalTable]: 物理表对象列表
         """
         tables = []
-        tbl_factory = PhysicalTableMetaFactory()
+        # tbl_factory = PhysicalTableMetaFactory()
         result = graph.query("""
                 MATCH (e:DataEntity)-[:IMPLEMENTS]->(t:PhysicalTable) WHERE ID(e)=%s
-                RETURN t
+                RETURN ID(t) as tbl_id, t.full_table_name as full_table_name
             """, (entity_id, ))
 
         for _r in result:
-            t = _r[0]
-            d = tbl_factory.convert(t, graph)
-            tables.append(d)
+            tables.append(dict(id=_r[0], full_table_name=_r[1]))
         return tables
+
 
 class PhysicalTableMetaFactory(MetaFactory):
     """物理表元模型工厂类，用于处理PhysicalTable类型顶点"""
@@ -191,6 +193,7 @@ class ColumnMetaFactory(MetaFactory):
                       dtype=cell.properties["dtype"],
                       node=cell.label)
 
+
 class OtherMetaFactory(MetaFactory):
     """其他元模型工厂类，用于处理未特殊处理的顶点类型"""
 
@@ -227,6 +230,7 @@ class OtherMetaFactory(MetaFactory):
         else:
             raise ValueError(f"Unknown vertex label: {cell.label}")
 
+
 class RelatedToMetaFactory(MetaFactory):
     """关系元模型工厂类，用于处理RELATED_TO类型边"""
 
@@ -259,6 +263,13 @@ class RelatedToMetaFactory(MetaFactory):
         return RelatedTo(id=cell.id, from_id=cell.start_id, to_id=cell.end_id)
 
 
+def _age_obj_key(_, c:Any) -> int:
+    if isinstance(c, age.models.Vertex) or isinstance(c, age.models.Edge):
+        return hash(f"ID:{c.id}")
+    return hash(c)
+
+meta_obj_cache = TTLCache(maxsize=200, ttl=3000)
+
 class MetadataHelper:
     """元数据查询类，用于执行元数据查询并返回结果"""
     meta_factories:List[MetaFactory] = [
@@ -273,6 +284,7 @@ class MetadataHelper:
     def __init__(self, graph:AGEGraph):
         self.graph = graph
 
+    @cachedmethod(lambda _: meta_obj_cache, key=_age_obj_key)
     def _convert_age2model(self, c:Any):
         """将AGE数据库类型转换为元模型对象
         
@@ -289,7 +301,8 @@ class MetadataHelper:
             print("No implemented.", c)
         return str(c)
 
-    def _traverse_age_result(self, contents,
+    def _traverse_age_result(self,
+                             contents,
                              metaobj_list:list):
         """遍历AGE查询结果提取元模型对象
         

@@ -36,7 +36,7 @@ class PhysicalTable(MetaObject):
 
 class DataEntity(MetaObject):
     """数据实体"""
-    tables: Annotated[List[PhysicalTable], Field(default=[], description="物理表")]
+    tables: Annotated[List[Dict], Field(default=[], description="物理表")]
 
 class Column(MetaObject):
     """列"""

@@ -33,8 +33,8 @@ class TestMetadataHelper:
         """
         query = CypherQuery(cypher=cypher, explanation="测试")
         resp = self.metadata_helper.query(query)
-        self.collect_table_defines(resp.contents)
-        assert resp.contents is not None
+        self.collect_table_defines(resp["contents"])
+        assert resp["contents"] is not None
 
     def collect_table_defines(self,
                               contents: List | DataEntity | PhysicalTable | RelatedTo) -> None:

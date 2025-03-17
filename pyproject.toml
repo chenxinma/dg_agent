@@ -1,4 +1,28 @@
+[project]
+name = "dg-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "age",
+    "cachetools>=5.5.2",
+    "fastapi>=0.115.11",
+    "logfire[fastapi]>=3.8.1",
+    "mcp[cli]>=1.4.1",
+    "opentelemetry-instrumentation-asgi>=0.52b0",
+    "psycopg2-binary>=2.9.10",
+    "pydantic-ai>=0.0.40",
+    "pytest>=8.3.5",
+    "python-multipart>=0.0.20",
+    "sqlparse>=0.5.3",
+    "uvicorn>=0.34.0",
+]
+
 [tool.logfire]
 project_name="DG Agent"
 console_colors="never"
 ignore_no_config=true
+
+[tool.uv.sources]
+age = { path = "./drivers/age-1.0.0-py3-none-any.whl" }

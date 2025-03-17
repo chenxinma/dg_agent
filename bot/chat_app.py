@@ -41,7 +41,7 @@ origins = [
 ]
 
 WEBROOT_DIR = Path(__file__).parent.joinpath('web')
-usage_limits = UsageLimits(request_limit=10)
+usage_limits = UsageLimits(request_limit=10, total_tokens_limit=20000)
 
 @asynccontextmanager
 async def lifespan(_app: fastapi.FastAPI):
@@ -132,14 +132,16 @@ async def post_chat(
             json.dumps(
                 {
                     'role': 'user',
-                    'timestamp': datetime.now(tz=timezone.utc).isoformat(),
+                    'timestamp': datetime.now(tz=timezone.utc).isoformat()+":Q",
                     'content': prompt,
                 }
             ).encode('utf-8')
             + b'\n'
         )
         # SupportResponse
-        async with dg_support_agent.iter(prompt, deps=metadata_graph) as run:
+        async with dg_support_agent.iter(prompt,
+                                         deps=metadata_graph,
+                                         usage_limits=usage_limits) as run:
             output_messages: list[str] = []
             _timestamp = datetime.now(tz=timezone.utc).isoformat()
             async for node in run:
