@@ -1,6 +1,7 @@
 """交互服务端"""
 from __future__ import annotations as _annotations
 
+import sys
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,9 @@ from pydantic_ai.messages import (
     FunctionToolResultEvent,
     FunctionToolCallEvent
 )
+
+BOT_DIR = Path(__file__).parent.parent
+sys.path.append(str(BOT_DIR))
 
 from bot.agent.dg_support import dg_support_agent
 from bot.graph.age_graph import AGEGraph

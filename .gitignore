@@ -4,10 +4,11 @@
 .pytest_cache
 settings.yaml
 **/__pycache__
+**/*.egg-info
 
 build
 dist
-make_graph/files/*
+src/make_graph/files/*
 
 sql_lab.py
 
