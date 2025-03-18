@@ -1,6 +1,6 @@
 """交互服务端"""
 from __future__ import annotations as _annotations
-
+import asyncio
 import sys
 import json
 from datetime import datetime, timezone
@@ -31,7 +31,7 @@ from pydantic_ai.messages import (
 
 BOT_DIR = Path(__file__).parent.parent
 sys.path.append(str(BOT_DIR))
-
+# pylint: disable=C0413
 from bot.agent.dg_support import dg_support_agent
 from bot.graph.age_graph import AGEGraph
 from bot.settings import settings
@@ -131,6 +131,7 @@ async def post_chat(
 
     async def stream_messages():
         """Streams new line delimited JSON `Message`s to the client."""
+
         # stream the user prompt so that can be displayed straight away
         yield (
             json.dumps(
@@ -142,66 +143,47 @@ async def post_chat(
             ).encode('utf-8')
             + b'\n'
         )
-        # SupportResponse
-        async with dg_support_agent.iter(prompt,
-                                         deps=metadata_graph,
-                                         usage_limits=usage_limits) as run:
-            output_messages: list[str] = []
-            _timestamp = datetime.now(tz=timezone.utc).isoformat()
-            async for node in run:
-                if Agent.is_model_request_node(node):
-                    async with node.stream(run.ctx) as request_stream:
-                        async for event in request_stream:
-                            if isinstance(event, PartDeltaEvent):
-                                if isinstance(event.delta, TextPartDelta):
-                                    output_messages.append(event.delta.content_delta)
-                                    m = ModelResponse(parts=[
-                                        TextPart("".join(output_messages))],
-                                        timestamp=_timestamp)
+        try:
+            # SupportResponse
+            async with dg_support_agent.iter(prompt,
+                                            deps=metadata_graph,
+                                            usage_limits=usage_limits) as run:
+                output_messages: list[str] = []
+                _timestamp = datetime.now(tz=timezone.utc).isoformat()
+                async for node in run:
+                    if Agent.is_model_request_node(node):
+                        async with node.stream(run.ctx) as request_stream:
+                            async for event in request_stream:
+                                if isinstance(event, PartDeltaEvent):
+                                    if isinstance(event.delta, TextPartDelta):
+                                        output_messages.append(event.delta.content_delta)
+                                        m = ModelResponse(parts=[
+                                            TextPart("".join(output_messages))],
+                                            timestamp=_timestamp)
+                                        yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
+                    elif Agent.is_call_tools_node(node):
+                        # A handle-response node => The model returned some data,
+                        # potentially calls a tool
+                        async with node.stream(run.ctx) as handle_stream:
+                            async for event in handle_stream:
+                                if isinstance(event, FunctionToolCallEvent):
+                                    output_messages.append(
+                                        f'\n\n [Tools] {event.part.tool_name!r} '+
+                                        f'开始 ID={event.part.tool_call_id!r} \n\n'
+                                    )
+                                    m = ModelResponse(parts=[TextPart("".join(output_messages))],
+                                                    timestamp=_timestamp)
                                     yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
-                elif Agent.is_call_tools_node(node):
-                    # A handle-response node => The model returned some data,
-                    # potentially calls a tool
-                    async with node.stream(run.ctx) as handle_stream:
-                        async for event in handle_stream:
-                            if isinstance(event, FunctionToolCallEvent):
-                                output_messages.append(
-                                    f'\n\n [Tools] {event.part.tool_name!r} 开始 ID={event.part.tool_call_id!r} \n\n'
-                                )
-                                m = ModelResponse(parts=[
-                                        TextPart("".join(output_messages))],
-                                        timestamp=_timestamp)
-                                yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
-                            elif isinstance(event, FunctionToolResultEvent):
-                                output_messages.append(
-                                    f'[Tools] ID={event.tool_call_id!r} 完成。 {str(event.result.content)[:30]} \n\n'
-                                )
-                                m = ModelResponse(parts=[
-                                        TextPart("".join(output_messages))],
-                                        timestamp=_timestamp)
-                                yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
-                # elif Agent.is_end_node(node):
-                #     assert run.result.data == node.data.data
-                #     # Once an End node is reached, the agent run is complete
-                #     m = ModelResponse(parts=[
-                #         TextPart(run.result.data)],
-                #         timestamp=datetime.now(tz=timezone.utc).isoformat())
-                #     yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
+                                elif isinstance(event, FunctionToolResultEvent):
+                                    output_messages.append(
+                                        f'[Tools] ID={event.tool_call_id!r} 完成。\n\n'
+                                    )
+                                    m = ModelResponse(parts=[TextPart("".join(output_messages))],
+                                                    timestamp=_timestamp)
+                                    yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
+        except asyncio.CancelledError:
+            print("Stream cancelled.")
 
-
-        # result = await dg_support_agent.run(prompt, deps=metadata_graph)
-        # m = ModelResponse(parts=[TextPart(result.data)], 
-        #                   timestamp=datetime.now(tz=timezone.utc).isoformat())
-        # yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
-
-        # async with dg_support_agent.run_stream(
-        #     prompt, deps=metadata_graph
-        # ) as result:
-        #     async for text in result.stream(debounce_by=0.01):
-        #         # text here is a `str` and the frontend wants
-        #         # JSON encoded ModelResponse, so we create one
-        #         m = ModelResponse(parts=[TextPart(text)], timestamp=result.timestamp())
-        #         yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
     return StreamingResponse(stream_messages(), media_type='text/plain')
 
 

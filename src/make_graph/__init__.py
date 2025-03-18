@@ -9,6 +9,7 @@ DSN = settings.get_setting("age")["dsn"]
 
 class ConceptModel:
     """概念模型"""
+    # pylint: disable=W0622
     def __init__(self, id, name, x, y, w, h):
         self.name = name
         self.id = id

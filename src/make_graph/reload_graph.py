@@ -2,8 +2,8 @@
 元模型导入图数据库
 """
 from io import StringIO
+from pathlib import Path
 
-import click
 import age
 from lxml import etree
 from tqdm import tqdm
@@ -12,6 +12,8 @@ from .domain import Domain
 from .entity import Entity
 from .application import Application
 from . import GRAPH_NAME, DSN
+
+SCRIPT_PAHT = Path(__file__).parent
 
 class ConceptSturture:
     """构建元模型 业务域、应用、数据实体"""
@@ -146,7 +148,7 @@ def clear_graph(ag):
             DETACH DELETE v
         $$) as (v agtype); ''', (GRAPH_NAME,))
 
-        _cursor.execute('''SELECT * from cypher(%s, $$ 
+        _cursor.execute('''SELECT * from cypher(%s, $$
             MATCH (v:Application)
             DETACH DELETE v
         $$) as (v agtype); ''', (GRAPH_NAME,))
@@ -156,13 +158,11 @@ def clear_graph(ag):
         $$) as (v agtype); ''', (GRAPH_NAME,))
     ag.commit()
 
-
-@click.command()
-@click.argument('fname', type=click.Path(exists=True))
-def main(fname:str=None):
+def main():
     """
     从XML文件中读取数据结构，并写入图数据库
     """
+    fname = SCRIPT_PAHT / "files/数据架构.drawio.xml"
     print(f"Reading file:{fname}")
     # 读取XML文件
     with open(fname, 'rb') as f:  # 使用'rb'模式读取文件

@@ -12,10 +12,12 @@ try:
     from .metadata import (MetaFactory,
                            PhysicalTable,
                            DataEntity,
-                           BusinessDomain,
-                           RelatedTo,
+                           BusinessDomain,                           
                            Application,
-                           Column)
+                           Column,
+                           BusinessTerm,
+                           RelatedTo,
+                           FlowsTo)
     from . import (
                CypherQuery,
                DataGovResponse
@@ -193,6 +195,36 @@ class ColumnMetaFactory(MetaFactory):
                       dtype=cell.properties["dtype"],
                       node=cell.label)
 
+class BusinessTermMetaFactory(MetaFactory):
+    """业务术语元模型工厂类，用于处理BusinessTerm类型顶点"""
+    def fit(self, cell)->bool:
+        """判断单元格是否为BusinessTerm类型的顶点
+        
+        Args:
+            cell: 待判断的单元（顶点或边）
+            
+        Returns:
+            bool: 如果cell是BusinessTerm类型的顶点返回True，否则False
+        """
+        return isinstance(cell, age.models.Vertex) and cell.label == "BusinessTerm"
+
+    def convert(self, cell, graph:AGEGraph):
+        """将BusinessTerm顶点转换为业务术语元模型对象
+        
+        Args:
+            cell: BusinessTerm顶点
+            graph: AGEGraph实例
+            
+        Returns:
+            BusinessTerm: 业务术语元模型对象
+        """
+        return BusinessTerm(id=cell.id,
+                            name=cell.properties["name"],
+                            definition=cell.properties["definition"],
+                            owner=cell.properties["owner"],
+                            status=cell.properties["status"],
+                            node=cell.label
+                            )
 
 class OtherMetaFactory(MetaFactory):
     """其他元模型工厂类，用于处理未特殊处理的顶点类型"""
@@ -262,6 +294,30 @@ class RelatedToMetaFactory(MetaFactory):
                              rel=cell.properties["rel"])
         return RelatedTo(id=cell.id, from_id=cell.start_id, to_id=cell.end_id)
 
+class FlowsToMetaFactory(MetaFactory):
+    """流到元模型工厂类，用于处理FLOWS_TO类型边"""
+    def fit(self, cell)->bool:
+        """判断单元格是否为FLOWS_TO类型的边
+        
+        Args:
+            cell: 待判断的单元（顶点或边）
+            
+        Returns:
+            bool: 如果cell是FLOWS_TO类型的边返回True，否则False
+        """
+        return isinstance(cell, age.models.Edge)  and  cell.label == "FLOWS_TO"
+
+    def convert(self, cell, graph:AGEGraph):
+        """将FLOWS_TO边转换为流到元模型对象
+        
+        Args:
+            cell: FLOWS_TO边
+            graph: AGEGraph实例
+            
+        Returns:
+            FlowsTo: 流到元模型对象
+        """
+        return FlowsTo(id=cell.id, from_id=cell.start_id, to_id=cell.end_id)
 
 def _age_obj_key(_, c:Any) -> int:
     if isinstance(c, age.models.Vertex) or isinstance(c, age.models.Edge):
@@ -277,8 +333,10 @@ class MetadataHelper:
         DataEntityMetaFactory(),
         PhysicalTableMetaFactory(),
         ColumnMetaFactory(),
+        BusinessTermMetaFactory(),
         OtherMetaFactory(),
-        RelatedToMetaFactory()
+        RelatedToMetaFactory(),
+        FlowsToMetaFactory()
     ] # 元模型工厂列表
 
     def __init__(self, graph:AGEGraph):

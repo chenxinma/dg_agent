@@ -1,11 +1,12 @@
 // BIG FAT WARNING: to avoid the complexity of npm, this typescript is compiled in the browser
 // there's currently no static type checking
 
-import { marked } from 'https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.0/lib/marked.esm.js'
+import { marked } from 'https://cdn.bootcdn.net/ajax/libs/marked/15.0.6/lib/marked.esm.min.js'
 const convElement = document.getElementById('conversation')
 
 const promptInput = document.getElementById('prompt-input') as HTMLInputElement
 const spinner = document.getElementById('spinner')
+const stopButton = document.getElementById('stop-button') as HTMLButtonElement
 
 // stream the response and render messages as each chunk is received
 // data is sent as newline-delimited JSON
@@ -13,6 +14,13 @@ async function onFetchResponse(response: Response): Promise<void> {
   let text = ''
   let decoder = new TextDecoder()
   if (response.ok) {
+    if (!response.body) {
+      console.warn('Response body is null, skipping streaming.');
+      return;
+    }
+    if (stopButton) {
+      stopButton.classList.remove('d-none');
+    }
     const reader = response.body.getReader()
     while (true) {
       const {done, value} = await reader.read()
@@ -21,11 +29,18 @@ async function onFetchResponse(response: Response): Promise<void> {
       }
       text += decoder.decode(value)
       addMessages(text)
-      spinner.classList.remove('active')
+      if (spinner) {
+        spinner.classList.remove('active')
+      }
+      // 如果接收到新的消息则重置控制器
+      controller = new AbortController()
     }
     addMessages(text)
     promptInput.disabled = false
     promptInput.focus()
+    if (stopButton) {
+      stopButton.classList.add('d-none');
+    }
   } else {
     const text = await response.text()
     console.error(`Unexpected response: ${response.status}`, {response, text})
@@ -58,7 +73,9 @@ function addMessages(responseText: string) {
       msgDiv.id = id
       msgDiv.title = `${role} at ${timestamp}`
       msgDiv.classList.add('border-top', 'pt-2', role)
-      convElement.appendChild(msgDiv)
+      if (convElement) {
+        convElement.appendChild(msgDiv)
+      }
     }
     msgDiv.innerHTML = marked.parse(content)
   }
@@ -67,24 +84,53 @@ function addMessages(responseText: string) {
 
 function onError(error: any) {
   console.error(error)
-  document.getElementById('error').classList.remove('d-none')
-  document.getElementById('spinner').classList.remove('active')
+  let _err = document.getElementById('error')
+  if (_err) {
+    _err.classList.remove('d-none')
+  }
+  let _spinner = document.getElementById('spinner')
+  if (_spinner) {
+    _spinner.classList.remove('active')
+  }
 }
+
+let controller: AbortController | null = null
 
 async function onSubmit(e: SubmitEvent): Promise<void> {
   e.preventDefault()
-  spinner.classList.add('active')
+  if (spinner) {
+    spinner.classList.add('active')
+  }
   const body = new FormData(e.target as HTMLFormElement)
-
+  
   promptInput.value = ''
   promptInput.disabled = true
-
-  const response = await fetch('/chat/', {method: 'POST', body})
+  
+  // 使用AbortController来控制fetch请求
+  controller = new AbortController()
+  const response = await fetch('/chat/', { method: 'POST', body, signal: controller.signal })
   await onFetchResponse(response)
 }
 
-// call onSubmit when the form is submitted (e.g. user clicks the send button or hits Enter)
-document.querySelector('form').addEventListener('submit', (e) => onSubmit(e).catch(onError))
+  // 添加停止按钮的事件监听器
+  if (stopButton) {
+    stopButton.addEventListener('click', () => {
+      if (controller) {
+        controller.abort()
+        console.log('Fetch aborted.')
+        if (spinner) {
+          spinner.classList.remove('active')
+        }
+        promptInput.disabled = false
+      }
+    })
+  }
 
-// load messages on page load
-fetch('/chat/').then(onFetchResponse).catch(onError)
+  // call onSubmit when the form is submitted (e.g. user clicks the send button or hits Enter)
+  let _form = document.querySelector('form')
+  if (_form) {
+    _form.addEventListener('submit', (e) => onSubmit(e).catch(onError))
+  }
+  
+  // load messages on page load
+  fetch('/chat/').then(onFetchResponse).catch(onError)

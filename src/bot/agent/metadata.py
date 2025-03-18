@@ -42,12 +42,25 @@ class Column(MetaObject):
     """列"""
     dtype: Annotated[str, Field(description="数据类型")]
 
+class BusinessTerm(MetaObject):
+    """业务术语"""
+    definition: Annotated[str, Field(description="定义")]
+    owner: Annotated[str, Field(description="拥有者")]
+    status: Annotated[str, Field(description="状态")]
+
 class RelatedTo(BaseModel):
     """关联"""
     from_id: Annotated[int, Field(description="上联数据实体的ID")]
     to_id: Annotated[int, Field(description="下联数据实体的ID")]
     id: Annotated[int, Field(description="ID")]
     rel: Annotated[str, Field(description="具体的关联信息，包含关联字段和条件", default='')]
+
+class FlowsTo(BaseModel):
+    """流向/复制"""
+    from_id: Annotated[int, Field(description="源数据实体的ID")]
+    to_id: Annotated[int, Field(description="目标数据实体的ID")]
+    id: Annotated[int, Field(description="ID")]
+
 
 @dataclass(init=False)
 class MetaFactory:

@@ -48,10 +48,11 @@
       <div id="spinner"></div>
     </div>
     <form method="post">
-      <input id="prompt-input" name="prompt" class="form-control"/>
-      <div class="d-flex justify-content-end">
-        <button class="btn btn-primary mt-2">Send</button>
-      </div>
+      <textarea id="prompt-input" name="prompt" class="form-control"></textarea>
+  <div class="d-flex justify-content-between">
+  <button id="stop-button" class="btn btn-danger d-none" type="button">Stop</button>
+    <button class="btn btn-primary mt-2">Send</button>
+  </div>
     </form>
     <div id="error" class="d-none text-danger">
       Error occurred, check the browser developer console for more information.
