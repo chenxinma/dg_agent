@@ -16,7 +16,6 @@ class Settings:
         if path:
             files.insert(0, Path(path))
         for p in setting_files:
-            print("settings:", p)
             if p.exists():
                 self.path = p.absolute()
                 break

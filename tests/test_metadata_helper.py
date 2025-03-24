@@ -3,6 +3,8 @@
 from typing import List
 
 import logfire
+
+# pylint: disable=E0401
 from bot.graph.age_graph import AGEGraph
 from bot.agent.metadata import DataEntity, PhysicalTable, RelatedTo
 from bot.agent.metadata_tools import MetadataHelper

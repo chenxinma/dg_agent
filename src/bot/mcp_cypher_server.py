@@ -6,8 +6,10 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict
 
 import logfire
-from mcp.server.fastmcp import FastMCP, Context
-from mcp.server.fastmcp.prompts.base import Message, AssistantMessage, UserMessage
+import mcp
+from mcp import types
+from mcp.server.lowlevel import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
 
 MCP_DIR = Path(__file__).parent.parent
 sys.path.append(str(MCP_DIR))
@@ -96,7 +98,7 @@ class MCPRetry(Exception):
     """Retry exception"""
 
 @asynccontextmanager
-async def app_lifespan(_server: FastMCP) -> AsyncIterator[Dict[str, AGEGraph]]:
+async def app_lifespan(_server: Server) -> AsyncIterator[Dict[str, AGEGraph]]:
     """Manage application lifecycle with type-safe context"""
     # 资源初始化
     _metadata_graph = \
@@ -105,7 +107,7 @@ async def app_lifespan(_server: FastMCP) -> AsyncIterator[Dict[str, AGEGraph]]:
     yield {'metadata_graph': _metadata_graph}
 
 # Pass lifespan to server
-mcp = FastMCP("data_governance", lifespan=app_lifespan)
+server = Server("data_governance", lifespan=app_lifespan)
 
 def _wrap_cypher(cypher: str) -> str:
     c = cypher.replace("\\n", "\n")
@@ -113,18 +115,45 @@ def _wrap_cypher(cypher: str) -> str:
         c = c[:-1]
     return c
 
-@mcp.tool()
-def cypher_query(query: CypherQuery, ctx: Context) -> DataGovResponse:
-    """业务域、应用、数据实体、物理表、业务术语信息查询工具。
-       ** 提示，在执行 cypher_query 前需要先做以下步骤：**
-       + 1.引用资源 @schema://data_governance 获得数据治理图数据结构。
-       + 2.需要使用'cypher_query_prompt'提示词模板生成query参数。
-       
+@server.list_tools()
+async def list_tools() -> list[types.Tool]:
+    """list tools"""
+    _graph = server.request_context.lifespan_context["metadata_graph"]
+    return [
+        types.Tool(
+            name="cypher_query",
+            description=
+f"""业务域、应用、数据实体、物理表、业务术语信息查询工具。
+注意：对name属性的查询例如数据实体名、应用名、业务域名等，不要翻译。
+{_graph.schema}
+{_EXAMPLES}
+""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cypher": {"type": "string", "description": "Cypher query"},
+                    "explanation": {"type": "string", "description": "查询的解释，以 Markdown 格式呈现'"},
+                },
+                "required": ["cypher", "explanation"]
+            }
+        )
+    ]
+
+@server.call_tool()
+async def call_tool(name: str, arguments: dict) -> list[types.TextContent | types.EmbeddedResource]:
+    """Call tool"""
+    if name == "cypher_query":
+        resp = cypher_query(CypherQuery(cypher=arguments["cypher"],
+                                        explanation=arguments["explanation"]))
+        return [types.TextContent(type="text", text=str(resp))]
+    raise MCPRetry(f"Unknown tool name: {name}")
+
+def cypher_query(query: CypherQuery) -> DataGovResponse:
+    """Do cypher query       
     Args:
         query: cypher and explanation from agent to execute
-        ctx: mcp server context
     """
-    _graph = ctx.request_context.lifespan_context["metadata_graph"]
+    _graph = server.request_context.lifespan_context["metadata_graph"]
     # vaildate cypher
 
     if not query.cypher.upper().startswith('MATCH'):
@@ -141,45 +170,22 @@ def cypher_query(query: CypherQuery, ctx: Context) -> DataGovResponse:
 
     return result
 
-
-@mcp.resource("schema://data_governance")
-def get_schema() -> str:
-    """Provide the database schema as a resource"""
-    ctx = mcp.get_context()
-    _graph = ctx.request_context.lifespan_context["metadata_graph"]
-    return _graph.schema + "\n 备注：dtype为数据类型"
-
-@mcp.prompt(name="cypher_generate_prompt",
-            description="cypher_query执行前的Cypher查询生成时的提示词模板")
-def cypher_generate_prompt(message: str) -> list[Message]:
-    """
-    cypher_query执行前的Cypher查询生成时的提示词模板
-    
-    Args:
-        message: Cypher查询生成时的提示词
-    Returns:
-        list[Message]: 提示词模板
-    """
-    ctx = mcp.get_context()
-    _graph = ctx.request_context.lifespan_context["metadata_graph"]
-    return [
-        AssistantMessage(content="""
-你是一个数据治理知识支持助手。
-你可以根据下面给定的图数据架构生成Cyher查询语句。
-+ 你会被问及关于这个图数据中关于业务域、应用、数据实体、物理表和数据实体间的关联（RELATE_TO）相关问题，
- 此时可以通过使用'cypher_query'工具执行Cypher获得结果直接反馈。
-+ 你会被问及一些业务定义和术语说明，此时可以通过'cypher_query'工具执行Cypher查询'业务术语(BusinessTerm)'获得结果。
-注意：对name属性的查询例如数据实体名、应用名、业务域名等，不要翻译。
-        """),
-        AssistantMessage(content=_graph.schema ),
-        AssistantMessage(content=_EXAMPLES ),
-        UserMessage(content=message),
-    ]
+async def run():
+    """Execute the server"""
+    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            InitializationOptions(
+                server_name="data_governance",
+                server_version="0.1.0",
+                capabilities=server.get_capabilities(
+                    notification_options=NotificationOptions(),
+                    experimental_capabilities={},
+                ),
+            ),
+        )
 
 if __name__ == "__main__":
-    # Initialize and run the server
-    mcp.run()
-    # import uvicorn
-    # uvicorn.run(
-    #     'bot.mcp_server:mcp',
-    # )
+    import asyncio
+    asyncio.run(run())

@@ -1,4 +1,5 @@
 """settings test"""
+# pylint: disable=E0401
 from bot.settings import settings
 
 def test_01():

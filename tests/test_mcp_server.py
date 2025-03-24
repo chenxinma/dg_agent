@@ -1,13 +1,18 @@
 """测试MCP Server"""
 import asyncio
+import logfire
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+# pylint: disable=E0401
 from bot.agent import CypherQuery
+
+# 配置日志
+logfire.configure(environment='local', send_to_logfire=False,)
 
 server_params = StdioServerParameters(
     command="python", # Executable
-    args=["bot\\mcp_server.py"], # Optional command line arguments
+    args=["src\\bot\\mcp_server.py"], # Optional command line arguments
     env=None # Optional environment variables
 )
 

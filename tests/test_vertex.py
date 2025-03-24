@@ -1,4 +1,5 @@
 """测试序列化结果，用于确认传递给大模型的文本形式"""
+# pylint: disable=E0401
 from bot.agent.metadata import BusinessDomain, Application, DataEntity
 
 def test_01():

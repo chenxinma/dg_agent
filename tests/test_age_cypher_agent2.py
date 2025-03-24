@@ -4,6 +4,8 @@
 import asyncio
 import logfire
 from pydantic_ai import UnexpectedModelBehavior, capture_run_messages
+
+# pylint: disable=E0401
 from bot.agent import CypherQuery
 from bot.agent.age_cypher_agent import age_agent
 from bot.graph.age_graph import AGEGraph
