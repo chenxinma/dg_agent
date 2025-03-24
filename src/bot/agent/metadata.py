@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Annotated, List, Dict
 
 from pydantic import BaseModel, Field
-from bot.graph.age_graph import AGEGraph
+from bot.graph.base_graph import BaseGraph
 
 
 class MetaObject(BaseModel):
@@ -70,5 +70,5 @@ class MetaFactory:
         """判断是否可以转换"""
 
     @abstractmethod
-    def convert(self, cell, graph:AGEGraph) -> MetaObject | BaseModel:
+    def convert(self, cell, graph:BaseGraph) -> MetaObject | BaseModel:
         """转换"""

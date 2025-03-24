@@ -6,11 +6,14 @@ langchain/libs/community/langchain_community/graphs/age_graph.py
 """
 from __future__ import annotations
 
+from math import e
 import re
 from typing import Dict, List, Tuple, Union, Sequence, Any
 
 import age
 import logfire
+
+from .base_graph import BaseGraph
 
 
 class AGEQueryException(Exception):
@@ -32,7 +35,7 @@ class AGEQueryException(Exception):
         """get details"""
         return self.details
 
-class AGEGraph:
+class AGEGraph(BaseGraph):
     """
     Apache AGE 操作类
     """
@@ -47,19 +50,23 @@ class AGEGraph:
     }
 
     def _get_age(self) -> age.Age:
-        return age.connect(graph=self.graph_name, dsn=self.dsn)
+        age_db: age.Age = age.connect(graph=self.graph_name, dsn=self.dsn)
+        assert age_db.connection is not None
+        return age_db
+
 
     def __init__(
         self, graph_name: str, dsn: str
     ) -> None:
         self.graph_name = graph_name
         self.dsn = dsn
-        
+        _conn = self._get_age().connection
+        assert _conn is not None
 
-        with self._get_age().connection.cursor() as curs:
-            curs.execute(f"""SELECT graphid FROM ag_catalog.ag_graph WHERE name = '{graph_name}'""")
+        with _conn.cursor() as curs:
+            curs.execute("""SELECT graphid FROM ag_catalog.ag_graph WHERE name = %s""", (graph_name,))
             data = curs.fetchone()
-
+            assert data is not None
             self.graphid = data[0]
             logfire.info("graphid:{id}", id=self.graphid)
 
@@ -110,7 +117,7 @@ class AGEGraph:
             return field.replace("(", "_").replace(")", "")
 
     @staticmethod
-    def _wrap_query(query: str, graph_name: str) -> str:
+    def _wrap_query(query: str, graph_name: str) -> Tuple[str, List[str]]:
         """
         Convert a Cyper query to an Apache Age compatible Sql Query.
         Handles combined queries with UNION/EXCEPT operators
@@ -137,7 +144,7 @@ class AGEGraph:
         # split the query into parts based on UNION and EXCEPT
         parts = re.split(r"\b(UNION\b|\bEXCEPT)\b", query, flags=re.IGNORECASE)
 
-        all_fields = []
+        all_fields: list[str] = []
 
         for part in parts:
             if part.strip().upper() in ("UNION", "EXCEPT"):
@@ -173,28 +180,106 @@ class AGEGraph:
                         all_fields.append(field_name)
 
         # if no return statements found in any part
+        wrap_fields = ["a"]
         if not all_fields:
             fields_str = "a agtype"
-
         else:
             fields_str = ", ".join(f"{field} agtype" for field in all_fields)
-
+            wrap_fields = all_fields
         return template.format(
             graph_name=graph_name,
             query=query,
             fields=fields_str,
             projection="*",
-        )
+        ), wrap_fields
 
-    def query(self, query: str, params:Sequence=None) -> List[Dict[str, Any]]:
+    @staticmethod
+    def _record_to_dict(record: Tuple, fields: List[str]) -> Dict[str, Any]:
+        """
+        Convert a record returned from an age query to a dictionary
+
+        Args:
+            record (): a record from an age query result
+
+        Returns:
+            Dict[str, Any]: a dictionary representation of the record where
+                the dictionary key is the field name and the value is the
+                value converted to a python type
+        """
+        def _make_edge(edge: age.models.Edge)  -> Dict[str, Any]:
+            """
+            Convert an edge from id-label->id to a dictionary
+            """
+            assert edge.label is not None
+
+            _e = {
+                "id": edge.id,
+                "label": edge.label,
+                "properties": edge.properties,
+                "from_id": edge.start_id,
+                "to_id": edge.end_id,
+                "type": "edge"
+            }
+            if edge.properties:
+                _e.update(edge.properties)
+            
+            return _e
+        
+        def _make_vertex(vertex: age.models.Vertex) -> Dict[str, Any]:
+            """
+            Convert a vertex from id-label to a dictionary
+            """
+            vtx = {
+                "id": vertex.id, 
+                "label": vertex.label,
+                "type": "vertex"
+            }
+            if vertex.properties:
+                vtx.update(v.properties)
+            return vtx
+
+        # result holder
+        d = {}
+
+        # prebuild a mapping of vertex_id to vertex mappings to be used
+        # later to build edges
+        vertices = {}
+        for v in record:
+            # agtype comes back '{key: value}::type' which must be parsed
+            if isinstance(v, age.models.Vertex):
+                vertices[v.id] = _make_vertex(v)
+
+        # iterate returned fields and parse appropriately
+        for k, v in zip(fields, record):
+            if isinstance(v, age.models.Vertex):
+                d[k] = _make_vertex(v)
+            # convert edge from id-label->id by replacing id with node information
+            # we only do this if the vertex was also returned in the query
+            # this is an attempt to be consistent with neo4j implementation
+            elif isinstance(v, age.models.Edge):
+                d[k] = _make_edge(v)
+            elif isinstance(v, list):
+                # make path
+                d[k] = [ _make_edge(e) if isinstance(e, age.models.Edge) else _make_vertex(e) \
+                        for e in v ]
+            else:
+                #print("other:", type(v))
+                d[k] = v if isinstance(v, str) else v
+
+        return d
+
+    def query(self, query: str, params:Sequence | None = None) -> List[Dict[str, Any]]:
         """
         执行查询
         """
-        _wrap_query = AGEGraph._wrap_query(query, self.graph_name)
+        _wrap_query, fields = AGEGraph._wrap_query(query, self.graph_name)
 
         # execute the query, rolling back on an error
         _age = self._get_age()
-        with _age.connection.cursor() as curs:
+        _conn = _age.connection
+        assert _conn is not None
+
+        with _conn.cursor() as curs:
             try:
                 if params is None:
                     curs.execute(_wrap_query)
@@ -209,21 +294,32 @@ class AGEGraph:
                     }
                 ) from e
 
-            return curs.fetchall()
+            data = curs.fetchall()
+            if data is None:
+                result = []
+            # convert to dictionaries
+            else:
+                result = [AGEGraph._record_to_dict(d, fields) for d in data]
+            return result
 
     def explain(self, query: str):
         """
         执行查询计划 验证SQL
         """
-        _wrap_query = "EXPLAIN " + AGEGraph._wrap_query(query, self.graph_name)
-        with self._get_age().connection.cursor() as curs:
+        _wrap_query, _ = AGEGraph._wrap_query(query, self.graph_name)
+        _wrap_query = "EXPLAIN " + _wrap_query
+        _conn = self._get_age().connection
+        assert _conn is not None
+        with _conn.cursor() as curs:
             curs.execute(_wrap_query)
 
     def _get_labels(self) -> Tuple[List[str], List[str]]:
         """
         获取labels
         """
-        with self._get_age().connection.cursor() as curs:
+        _conn = self._get_age().connection
+        assert _conn is not None
+        with _conn.cursor() as curs:
             curs.execute(f"""SELECT "name", kind
                              FROM ag_catalog.ag_label WHERE graph = {self.graphid}""")
             labels = curs.fetchall()
@@ -258,7 +354,9 @@ class AGEGraph:
         triple_schema = []
 
         # iterate desired edge types and add distinct relationship types to result
-        with self._get_age().connection.cursor() as curs:
+        _conn = self._get_age().connection
+        assert _conn is not None
+        with _conn.cursor() as curs:
             for label in e_labels:
                 q = triple_query.format(graph_name=self.graph_name, e_label=label)
                 try:
@@ -311,12 +409,14 @@ class AGEGraph:
         SELECT * FROM ag_catalog.cypher('{graph_name}', $$
             MATCH (a:`{n_label}`)
             RETURN properties(a) AS props
-            LIMIT 100
+            LIMIT 10
         $$) AS (props agtype);
         """
 
         node_properties = []
-        with self._get_age().connection.cursor() as curs:
+        _conn = self._get_age().connection
+        assert _conn is not None
+        with _conn.cursor() as curs:
             for label in n_labels:
                 q = node_properties_query.format(
                     graph_name=self.graph_name, n_label=label
@@ -379,7 +479,9 @@ class AGEGraph:
         $$) AS (props agtype);
         """
         edge_properties = []
-        with self._get_age().connection.cursor() as curs:
+        _conn = self._get_age().connection
+        assert _conn is not None
+        with _conn.cursor() as curs:
             for label in e_labels:
                 q = edge_properties_query.format(
                     graph_name=self.graph_name, e_label=label
@@ -419,7 +521,7 @@ class AGEGraph:
         n_labels, e_labels = self._get_labels()
         triple_schema = self._get_triples(e_labels)
 
-        # node_properties = self._get_node_properties(n_labels)
+        node_properties = self._get_node_properties(n_labels)
         edge_properties = self._get_edge_properties(e_labels)
 
         # 生成图谱结构描述
@@ -427,6 +529,7 @@ class AGEGraph:
 ## 图数据库结构:
 ### 节点：
 {n_labels}
+{node_properties}
 ### 关联:
 {e_labels}
 {edge_properties}
@@ -451,3 +554,4 @@ class AGEGraph:
     # def structured_schema(self) -> Dict[str, Any]:
     #     """Returns the structured schema of the Graph"""
     #     return self._structured_schema
+

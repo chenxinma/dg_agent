@@ -1,13 +1,14 @@
 """
 graph模块用户生成图数据库的内容
 """
+from typing import Self
+
+
+import time
 import hashlib
-from bot.settings import settings
+from abc import ABC, abstractmethod
 
-GRAPH_NAME = settings.get_setting("age")["graph"]
-DSN = settings.get_setting("age")["dsn"]
-
-class ConceptModel:
+class ConceptModel(ABC):
     """概念模型"""
     # pylint: disable=W0622
     def __init__(self, id, name, x, y, w, h):
@@ -19,9 +20,15 @@ class ConceptModel:
         self.h = float(h)
 
     @staticmethod
-    def load(xml_root) -> list:
+    def load(xml_root) -> list | None:
         """读取设计稿"""
 
-def generate_unique_id(name):
+    @abstractmethod
+    def get_nid(self) -> str:
+        """节点id"""
+        
+
+def generate_unique_id(string: str):
     """生成唯一id"""
-    return hashlib.sha256(name.encode()).hexdigest()
+    hash_part = hashlib.sha256(string.encode()).hexdigest()[:16]
+    return hash_part

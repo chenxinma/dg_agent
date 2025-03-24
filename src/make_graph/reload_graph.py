@@ -4,14 +4,14 @@
 from io import StringIO
 from pathlib import Path
 
-import age
-from lxml import etree
+from lxml.etree import tostring, parse, fromstring
 from tqdm import tqdm
 
 from .domain import Domain
-from .entity import Entity
+from .dataentity import DataEntity
 from .application import Application
-from . import GRAPH_NAME, DSN
+from . import generate_unique_id
+
 
 SCRIPT_PAHT = Path(__file__).parent
 
@@ -20,7 +20,7 @@ class ConceptSturture:
     def __init__(self, xml_root):
         self._domain_list = Domain.load(xml_root)
         self._app_list = Application.load(xml_root)
-        self._entity_list = Entity.load(xml_root)
+        self._entity_list = DataEntity.load(xml_root)
         self._links = []
 
         for _app in self._app_list:
@@ -65,98 +65,63 @@ class ConceptSturture:
                 except (KeyError, AttributeError) as ex:
                     print(_node.attrib['id'], _source, _target, ex)
 
-    def make_graph(self, ag):
-        """写入图数据库"""
-        print("    Saving BusinessDomain list")
-        conn_1 = ag.connection
-        with conn_1.cursor() as _cursor:
+
+    def save_csv(self, output_dir=None):
+        """将结构数据写入CSV文件"""
+        import csv
+        
+        # 写入实体CSV文件
+        path = Path(output_dir) if output_dir else Path.cwd()
+        path.mkdir(parents=True, exist_ok=True)
+        with open(path / 'v_BusinessDomain.csv', 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['name', 'nid', 'code'])
             for _domain in self._domain_list:
-                _cursor.execute('''SELECT * from cypher(%s, $$
-                  CREATE (n:BusinessDomain {name: %s, nid: %s, code: %s}) 
-                $$) as (v agtype); ''', (GRAPH_NAME, _domain.name, _domain.id, _domain.code))
-
-        print("    Saving app_list")
-        with conn_1.cursor() as _cursor:
+                writer.writerow([_domain.name, _domain.get_nid(), _domain.code])
+        
+        with open(path / 'v_Application.csv', 'w',encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['name', 'nid'])
             for _app in self._app_list:
-                _cursor.execute('''SELECT * from cypher(%s, $$
-                  CREATE (n:Application {name: %s, nid: %s}) 
-                $$) as (v agtype); ''', (GRAPH_NAME, _app.name, _app.id))
-
-        print("    Saving domain-app belong")
-        with conn_1.cursor() as _cursor:
-            for _app in self._app_list:
-                _cursor.execute('''SELECT * from cypher(%s, $$
-                  MATCH (a:Application), (d:BusinessDomain)
-                  WHERE a.nid = %s AND d.nid = %s
-                  CREATE (d)-[e:CONTAINS]->(a)
-                  RETURN e
-                $$) as (e agtype); ''',
-                (GRAPH_NAME, _app.id, _app.domain.id))
-        ag.commit()
-
-        print("    Saving entity_list and entity-app REL")
-        conn_1 = ag.connection
-        with conn_1.cursor() as _cursor:
+                writer.writerow([_app.name, _app.get_nid()])
+        
+        with open(path / 'v_DataEntity.csv', 'w',  encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['name', 'nid'])
             for _entity in self._entity_list:
-                _cursor.execute('''SELECT * from cypher(%s, $$
-                  CREATE (n:DataEntity {name: %s, nid: %s}) 
-                $$) as (v agtype); ''', (GRAPH_NAME, _entity.name, _entity.id))
+                writer.writerow([_entity.name, _entity.get_nid()])
+        
+        # 写入关系CSV文件
+        with open(path / 'e_CONTAINS.csv', 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['from_BusinessDomain', 'to_Application'])
+            for _app in self._app_list:
+                writer.writerow([_app.domain.get_nid(), _app.get_nid()])
+        
+        with open(path / 'e_USES.csv', 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['from_Application', 'to_DataEntity'])
+            for _entity in self._entity_list:
+                writer.writerow([_entity.app.get_nid(), _entity.get_nid()])
 
-                _cursor.execute('''SELECT * from cypher(%s, $$
-                  MATCH (a:Application), (b:DataEntity)
-                  WHERE a.nid = %s AND b.nid = %s
-                  CREATE (a)-[e:USES]->(b)
-                  RETURN e
-                $$) as (e agtype);''', (GRAPH_NAME, _entity.app.id, _entity.id))
-
-                _cursor.execute('''SELECT * from cypher(%s, $$
-                  MATCH (a:BusinessDomain), (b:DataEntity)
-                  WHERE a.nid = %s AND b.nid = %s
-                  CREATE (b)-[e:BELONGS_TO]->(a)
-                  RETURN e
-                $$) as (e agtype);''', (GRAPH_NAME, _entity.app.domain.id , _entity.id))
-
-        print("    Saving entity FLOWS_TO")
-        with conn_1.cursor() as _cursor:
+        with open(path / 'e_BELONGS_TO.csv', 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['from_DataEntity', 'to_BusinessDomain'])
+            for _entity in self._entity_list:
+                writer.writerow([_entity.get_nid(), _entity.app.domain.get_nid()])
+        
+        with open(path / 'e_FLOWS_TO.csv', 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['from_DataEntity', 'to_DataEntity'])
             for _e1, _e2 in self._dup.values():
-                _cursor.execute('''SELECT * from cypher(%s, $$
-                    MATCH (a:DataEntity), (b:DataEntity)
-                    WHERE a.nid = %s AND b.nid = %s
-                    CREATE (a)-[e:FLOWS_TO]->(b)
-                    RETURN e
-                $$) as (e agtype);''', (GRAPH_NAME, _e1.id, _e2.id))
+                writer.writerow([_e1.get_nid(), _e2.get_nid()])
+        
+        with open(path / 'e_RELATED_TO.csv', 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['from_DataEntity', 'to_DataEntity'])
+            for _e1, _e2 in self._links:
+                writer.writerow([_e1.get_nid(), _e2.get_nid()])
 
-        print("    Saving entity-entity RELATED_TO")
-        with conn_1.cursor() as _cursor:
-            for _e1, _e2 in tqdm(self._links):
-                _cursor.execute('''SELECT * from cypher(%s, $$
-                    MATCH (a:DataEntity), (b:DataEntity)
-                    WHERE a.nid = %s AND b.nid = %s
-                    CREATE (a)-[e:RELATED_TO]->(b)
-                    RETURN e
-                $$) as (e agtype);''', (GRAPH_NAME, _e1.id, _e2.id))
-
-        ag.commit()
-
-
-def clear_graph(ag):
-    """清除图数据库"""
-    conn = ag.connection
-    with conn.cursor() as _cursor:
-        _cursor.execute('''SELECT * from cypher(%s, $$
-            MATCH (v:BusinessDomain)
-            DETACH DELETE v
-        $$) as (v agtype); ''', (GRAPH_NAME,))
-
-        _cursor.execute('''SELECT * from cypher(%s, $$
-            MATCH (v:Application)
-            DETACH DELETE v
-        $$) as (v agtype); ''', (GRAPH_NAME,))
-        _cursor.execute('''SELECT * from cypher(%s, $$
-            MATCH (v:DataEntity)                
-            DETACH DELETE v                   
-        $$) as (v agtype); ''', (GRAPH_NAME,))
-    ag.commit()
 
 def main():
     """
@@ -166,22 +131,20 @@ def main():
     print(f"Reading file:{fname}")
     # 读取XML文件
     with open(fname, 'rb') as f:  # 使用'rb'模式读取文件
-        tree = etree.parse(f)
+        tree = parse(f)
 
     diagram = tree.xpath('//diagram[@name="数据架构Lv1"]')[0]
 
-    xml_str = etree.tostring(diagram, pretty_print=True, encoding='unicode')
+    xml_str = tostring(diagram, pretty_print=True, encoding='unicode')
     f = StringIO(xml_str)
-    root = etree.parse(f)
+    root = parse(f)
     print("Creating concept structure.")
     cs = ConceptSturture(root)
     print("Linking relationships.")
     cs.link_entities(root)
 
-    print(f"Save to -> {GRAPH_NAME}")
-    ag = age.connect(graph=GRAPH_NAME, dsn=DSN)
-    clear_graph(ag)
-    cs.make_graph(ag)
+    print("Save to -> csv files")
+    cs.save_csv(SCRIPT_PAHT / 'files/data')
 
 
 if __name__ == '__main__':

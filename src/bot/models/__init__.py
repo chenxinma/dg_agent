@@ -39,7 +39,7 @@ class SiliconFlowModelFactory(ModelFactory):
     def fit(self, model: pydanticai_models.Model | KnownModelName)-> bool:
         return model.startswith('siliconflow:')
     
-    def create(self, model: pydanticai_models.Model | KnownModelName, api_key:str=None)-> pydanticai_models.Model:
+    def create(self, model: pydanticai_models.Model | KnownModelName, api_key:str | None = None)-> pydanticai_models.Model:
         from bot.models.siliconflow import SiliconFlowModel
         _model_name = model[12:]
         return SiliconFlowModel(_model_name, 
@@ -49,8 +49,8 @@ class SiliconFlowModelFactory(ModelFactory):
 class OllamaModelFactory(ModelFactory):
     def fit(self, model: pydanticai_models.Model | KnownModelName)-> bool:
         return model.startswith('ollama:')
-    
-    def create(self, model: pydanticai_models.Model | KnownModelName, api_key:str=None)-> pydanticai_models.Model:
+     
+    def create(self, model: pydanticai_models.Model | KnownModelName, api_key:str | None = None)-> pydanticai_models.Model:
         from pydantic_ai.models.openai import OpenAIModel
         ollama_model = OpenAIModel(model_name=model[7:], 
                                    base_url='http://172.16.37.21:11434/v1',
@@ -61,7 +61,7 @@ class BailianModelFactory(ModelFactory):
     def fit(self, model: pydanticai_models.Model | KnownModelName)-> bool:
         return model.startswith('bailian:')
     
-    def create(self, model: pydanticai_models.Model | KnownModelName, api_key:str=None)-> pydanticai_models.Model:
+    def create(self, model: pydanticai_models.Model | KnownModelName, api_key:str | None = None)-> pydanticai_models.Model:
         from pydantic_ai.models.openai import OpenAIModel
         _model_name = model[8:]
         return OpenAIModel(_model_name, 
@@ -72,7 +72,7 @@ class OtherModelFactory(ModelFactory):
     def fit(self, model: pydanticai_models.Model | KnownModelName)-> bool:
         return True
     
-    def create(self, model: pydanticai_models.Model | KnownModelName, api_key:str=None)-> pydanticai_models.Model:
+    def create(self, model: pydanticai_models.Model | KnownModelName, api_key:str | None = None)-> pydanticai_models.Model:
         return pydanticai_models.infer_model(model)
 
 
@@ -84,7 +84,7 @@ model_factories = [
     OtherModelFactory(),
 ]
 
-def infer_model(model: pydanticai_models.Model | KnownModelName, api_key:str=None) -> pydanticai_models.Model:
+def infer_model(model: pydanticai_models.Model | KnownModelName | str, api_key:str | None =None) -> pydanticai_models.Model | None:
     if isinstance(model, pydanticai_models.Model):
         return model
     

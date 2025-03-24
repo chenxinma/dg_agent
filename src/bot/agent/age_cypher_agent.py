@@ -112,7 +112,8 @@ RETURN e
 
     @staticmethod
     def get_agent() -> Agent:
-        _mode_setting = settings.get_setting("agents")["age_agent"]
+        model_name = settings.get_setting("agents.age_agent.model_name")
+        api_key = settings.get_setting("agents.age_agent.api_key")
 
         def graph_schema(ctx: RunContext[AGEGraph]) -> str:
             return ctx.deps.schema + AgeAgentFactory.EXAMPLES
@@ -124,7 +125,7 @@ RETURN e
             return c
 
         agent = Agent(
-            models.infer_model(_mode_setting["model_name"], _mode_setting["api_key"]),
+            models.infer_model(model_name, api_key),
             model_settings={'temperature': 0.0},
             deps_type=AGEGraph,
             result_type=Response,

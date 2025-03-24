@@ -1,6 +1,8 @@
 """bot settings"""
+from typing import Dict, Any
 from pathlib import Path
 import yaml
+from typing import Optional
 
 SETTING_FILE = "settings.yaml"
 setting_files = [
@@ -10,8 +12,9 @@ setting_files = [
 
 class Settings:
     """settings"""
-    def __init__(self, path: str = None) -> None:
-        self.path:Path = None
+    def __init__(self, path: str | None = None) -> None:
+        # Bug 修复：将类型从 Path 改为 Optional[Path]，允许赋值为 None
+        self.path: Optional[Path] = None
         files = setting_files
         if path:
             files.insert(0, Path(path))
@@ -31,6 +34,12 @@ class Settings:
 
     def get_setting(self, key: str) -> str:
         """get setting"""
-        return self.settings[key]
+        keys = key.split('.')
+        value = self.settings
+        for k in keys:
+            value = value[k]
+        if isinstance(value, str):
+            return value
+        raise ValueError(f"Expected a string value for key '{key}', but got {type(value).__name__} instead.")
 
 settings = Settings()

@@ -14,6 +14,9 @@ class Domain(ConceptModel):
         rs = a.x >= self.x and (a.x + a.w) <= (self.x + self.w) \
             and a.y >= self.y and (a.y + a.h) <= (self.y + self.h)
         return rs
+
+    def get_nid(self) -> str:
+        return self.id
     
     @staticmethod
     def load(xml_root) -> list:

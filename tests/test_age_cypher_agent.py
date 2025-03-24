@@ -12,8 +12,8 @@ from bot.settings import settings
 # 配置日志
 logfire.configure(environment='local', send_to_logfire=False)
 
-age_graph = AGEGraph(graph_name=settings.get_setting("age")["graph"],
-                    dsn=settings.get_setting("age")["dsn"])
+age_graph = AGEGraph(graph_name=settings.get_setting("age.graph"),
+                    dsn=settings.get_setting("age.dsn"))
 metadata_helper = MetadataHelper(age_graph)
 
 async def bot_call(question: str):

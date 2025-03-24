@@ -1,6 +1,6 @@
 from . import ConceptModel, generate_unique_id
 
-class Entity(ConceptModel):
+class DataEntity(ConceptModel):
     def __init__(self, id, name, x, y, w, h, gid):
         super().__init__(id, name, x, y, w, h)
         self._app = None
@@ -26,6 +26,9 @@ class Entity(ConceptModel):
         self._app = a
         self.id = generate_unique_id("%s.%s"%(a.name, self.name))
     
+    def get_nid(self) -> str:
+        return self.id
+    
     @staticmethod
     def load(xml_root) -> list:
         entity_list = []
@@ -39,7 +42,7 @@ class Entity(ConceptModel):
                 name = node.attrib['value']
             gid = e_node.attrib['id']
             shape = node.find('mxGeometry')
-            _entity = Entity(gid, name, shape.attrib['x'], shape.attrib['y'], 
+            _entity = DataEntity(gid, name, shape.attrib['x'], shape.attrib['y'], 
                             shape.attrib['width'], shape.attrib['height'],
                             gid)
             entity_list.append(_entity)

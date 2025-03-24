@@ -1,12 +1,19 @@
 """物理模型导入图数据库
 """
+from pandas.core.frame import DataFrame
+
+
+from pandas.core.series import Series
+
+
+from typing import Any
+
+
 from pathlib import Path
 import os
-import age
 import pandas as pd
 
-from tqdm import tqdm
-from . import GRAPH_NAME, DSN, generate_unique_id
+from . import generate_unique_id
 
 SCRIPT_PAHT = Path(__file__).parent
 
@@ -14,73 +21,55 @@ class MetadataSturture:
     """构建元模型 物理表、列"""
 
     def __init__(self, df_entities:pd.DataFrame, df_columns:pd.DataFrame):
-        self._df_entities = df_entities
-        self._df_columns = df_columns
+        self._df_entities: pd.DataFrame = df_entities
+        self._df_columns: pd.DataFrame = df_columns
 
-    def save_columns(self, cursor, full_table_name):
-        """保存列"""
-        _df = self._df_columns[self._df_columns['Table'] == full_table_name]
-        for row in _df.itertuples():
-            nid = generate_unique_id(full_table_name +"."+ row.Column)
-            cursor.execute('''SELECT * from cypher(%s, $$
-                    CREATE (n:Column {name: %s, dtype: %s, nid: %s}) 
-                    $$) as (v agtype); ''', (GRAPH_NAME,
-                                            row.Column,
-                                            row.Type,
-                                            nid))
-            cursor.execute('''SELECT * from cypher(%s, $$
-                    MATCH (a:PhysicalTable), (b:Column)
-                    WHERE a.full_table_name = %s AND b.nid = %s
-                    CREATE (a)-[e:HAS_COLUMN]->(b)
-                    RETURN e
-                    $$) as (e agtype); ''',
-                    (GRAPH_NAME, full_table_name, nid))
 
-    def save_tables(self, ag, db:pd.DataFrame):
-        """保持物理表"""
-        conn_1 = ag.connection
-        with conn_1.cursor() as _cursor:
-            for row in tqdm(db.itertuples(), total=db.shape[0]):
-                _full_table_name = f"{row.schema}.{row.table_name}"
-                _entity_name = row.name
+    def save_csv(self, output_dir):
+        """将物理表、列及其关联关系保存到CSV文件中"""
+         # 写入实体CSV文件
+        path = Path(output_dir) if output_dir else Path.cwd()
+        path.mkdir(parents=True, exist_ok=True)
 
-                _cursor.execute('''SELECT * from cypher(%s, $$
-                    CREATE (n:PhysicalTable {name: %s, table_name: %s, schema: %s, full_table_name: %s}) 
-                    $$) as (v agtype); ''', (GRAPH_NAME,
-                                            _entity_name,
-                                            row.table_name,
-                                            row.schema,
-                                            _full_table_name))
+        # 保存物理表信息
+        # 从 self._df_entities 中选择所需列并确保结果为 DataFrame 类型
+        tables_df: pd.DataFrame = pd.DataFrame(self._df_entities[["app_name", "name", "schema", "table_name"]])
+        tables_df["full_table_name"] = tables_df["schema"] + "." + tables_df["table_name"]
+        tables_df["dataentity_nid"] = tables_df.apply(lambda x: generate_unique_id(x.app_name +"."+ x["name"]), axis=1)
+        tables_df["nid"] = tables_df["full_table_name"].apply(generate_unique_id)
+        tables_df.rename(columns={"name": "entity_name"}, inplace=True)
+        tables_df[["schema", "table_name", "full_table_name", "nid"]] \
+            .to_csv(os.path.join(output_dir, "v_PhysicalTable.csv"), index=False)
 
-                _cursor.execute('''SELECT * from cypher(%s, $$
-                    MATCH (a:Application {name: %s} )-[r]->(e:DataEntity {name: %s}), (b:PhysicalTable)
-                    WHERE b.full_table_name = %s
-                    CREATE (e)-[i:IMPLEMENTS]->(b)
-                    RETURN i
-                    $$) as (i agtype); ''',
-                    (GRAPH_NAME, row.app_name, _entity_name, _full_table_name))
+        # 保存列信息
+        columns_df: pd.DataFrame = pd.DataFrame(self._df_columns[["Table", "Column", "Type"]])
+        columns_df["nid"] = columns_df.apply(lambda x: generate_unique_id(x.Table +"."+ x.Column), axis=1)
+        columns_df["physicaltable_nid"] = columns_df["Table"].apply(generate_unique_id)
+        columns_df.rename(columns={"Column": "name", "Type": "data_type"}, inplace=True)
+        columns_df = pd.DataFrame(columns_df[
+            columns_df["Table"].isin(tables_df["schema"] + "." + tables_df["table_name"])])
+        columns_df[["name", "data_type", "nid"]].to_csv(os.path.join(output_dir, "v_Column.csv"), index=False)
 
-                self.save_columns(_cursor, _full_table_name)
+        # 保存关联关系
+        implements = []
+        def apply_func(row):
+            """apply func"""
+            
+            implements.append({
+                "from_DataEntity": row.dataentity_nid,
+                "to_PhysicalTable": row.nid,
+            })
+        tables_df.apply(apply_func, axis=1)        
+        implements_df = pd.DataFrame(implements)
+        implements_df.to_csv(os.path.join(output_dir, "e_IMPLEMENTS.csv"), index=False)
 
-        ag.commit()
+        has_columns_df: DataFrame = pd.DataFrame(columns_df[["physicaltable_nid", "nid"]].copy())
+        has_columns_df.rename(columns={
+                                        "physicaltable_nid": "from_PhysicalTable",
+                                        "nid": "to_Column"
+                                      }, inplace=True)
+        has_columns_df.to_csv(os.path.join(output_dir, "e_HAS_COLUMN.csv"), index=False)
 
-    def make_graph(self, ag):
-        """构建物理模型"""
-        self.save_tables(ag, self._df_entities)
-
-def clear_graph(ag):
-    """清除图数据库"""
-    conn = ag.connection
-    with conn.cursor() as _cursor:
-        _cursor.execute('''SELECT * from cypher(%s, $$
-            MATCH (v:PhysicalTable)
-            DETACH DELETE v
-        $$) as (v agtype); ''', (GRAPH_NAME,))
-        _cursor.execute('''SELECT * from cypher(%s, $$
-            MATCH (v:Column)
-            DETACH DELETE v
-        $$) as (v agtype); ''', (GRAPH_NAME,))
-    ag.commit()
 
 def main():
     """
@@ -104,12 +93,9 @@ def main():
         df_entity = pd.read_excel(os.path.join(db_dir, f), sheet_name="Entities")
         df_all_entities = pd.concat([df_all_entities, df_entity])
 
-    print(f"Save to -> {GRAPH_NAME}")
-    ag = age.connect(graph=GRAPH_NAME, dsn=DSN)
-    clear_graph(ag)
-
-    ms = MetadataSturture(df_all_entities, df_all_columns)
-    ms.make_graph(ag)
+    print(f"Save to csv files...")
+    metadata_sturture = MetadataSturture(df_all_entities, df_all_columns)
+    metadata_sturture.save_csv(output_dir=SCRIPT_PAHT / 'files/data')
 
 if __name__ == '__main__':
     main()

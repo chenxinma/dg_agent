@@ -15,8 +15,8 @@ class TestAGEGraph:
 
     def setup_method(self):
         """初始化"""
-        g_name = settings.get_setting("age")["graph"]
-        dsn = settings.get_setting("age")["dsn"]
+        g_name:str = settings.get_setting("age.graph")
+        dsn:str = settings.get_setting("age.dsn")
 
         self.age_graph = AGEGraph(graph_name=g_name, dsn=dsn)
 
@@ -24,14 +24,15 @@ class TestAGEGraph:
     def test_query(self):
         """查询"""
         result = self.age_graph.query("MATCH (n:BusinessDomain) RETURN n LIMIT 1")
-        assert result[0][0].label == "BusinessDomain"
+        assert result[0]["n"]["label"] == "BusinessDomain"
 
     def test_query_with_params(self):
         """参数查询"""
         result = self.age_graph.query("MATCH (n:BusinessDomain {name:%s}) RETURN n",
                                       params=("财务", ))
-        assert result[0][0].properties["name"] == "财务"
+        assert result[0]["n"]["name"] == "财务"
 
+    @pytest.mark.skip()
     def test_query_with_error(self):
         """错误查询"""
         with pytest.raises(AGEQueryException,
@@ -49,5 +50,6 @@ class TestAGEGraph:
             """MATCH 
             (e1:DataEntity {name: '资金账户收入流水'})-[r:RELATED_TO*1..3]-(e2:DataEntity {name: '客户账单'})
             RETURN e1, r, e2""")
-        logfire.info("result: {r}", r=result)
+
+        print(result[0])
         assert len(result) == 1

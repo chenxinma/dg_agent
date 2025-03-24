@@ -1,6 +1,6 @@
-from . import ConceptModel
+from . import ConceptModel, generate_unique_id
 from .domain import Domain
-from .entity import Entity
+from .dataentity import DataEntity
 
 class Application(ConceptModel):
     def __init__(self, id, name, x, y, w, h):
@@ -25,14 +25,18 @@ class Application(ConceptModel):
         return self._entities
 
     @property
-    def domain(self) -> Domain:
+    def domain(self) -> Domain | None:
+        # 修改返回类型注解以匹配实际返回值，允许返回 None
         return self._domain
 
     @domain.setter
     def domain(self, d:Domain):
         self._domain = d
 
-    def contains(self, e:Entity):
+    def get_nid(self) -> str:
+        return generate_unique_id(self.name)
+
+    def contains(self, e:DataEntity):
         rs = e.x >= self.x and (e.x + e.w) <= (self.x + self.w) \
             and e.y >= self.y and (e.y + e.h) <= (self.y + self.h)
         return rs

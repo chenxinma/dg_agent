@@ -8,6 +8,7 @@ dependencies = [
     "age",
     "cachetools>=5.5.2",
     "fastapi>=0.115.11",
+    "kuzu>=0.8.2",
     "logfire[fastapi]>=3.8.1",
     "lxml>=5.3.1",
     "mcp[cli]>=1.4.1",

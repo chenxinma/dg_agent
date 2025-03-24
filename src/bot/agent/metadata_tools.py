@@ -4,7 +4,6 @@
 import json
 from typing import List, Any, Dict
 
-import age
 import logfire
 from cachetools import TTLCache, cachedmethod
 
@@ -25,7 +24,8 @@ try:
 finally:
     pass
 
-from bot.graph.age_graph import AGEGraph
+#from bot.graph.age_graph import AGEGraph
+from bot.graph.base_graph import BaseGraph
 
 
 class BusinessDomainMetaFactory(MetaFactory):
@@ -40,22 +40,22 @@ class BusinessDomainMetaFactory(MetaFactory):
         Returns:
             bool: 如果cell是BusinessDomain类型的顶点返回True，否则False
         """
-        return isinstance(cell, age.models.Vertex) and  cell.label == "BusinessDomain"
+        return isinstance(cell, dict) and cell['label'] == "BusinessDomain"
 
-    def convert(self, cell, graph:AGEGraph ):
+    def convert(self, cell, graph:BaseGraph ):
         """将BusinessDomain顶点转换为业务领域元模型对象
         
         Args:
             cell: BusinessDomain顶点
-            graph: AGEGraph实例
+            graph: BaseGraph实例
             
         Returns:
             BusinessDomain: 业务领域元模型对象
         """
-        return BusinessDomain(id=cell.id,
-                        name=cell.properties["name"],
-                        node=cell.label,
-                        code=cell.properties["code"])
+        return BusinessDomain(id=cell['id'],
+                        name=cell["name"],
+                        node=cell['label'],
+                        code=cell["code"])
 
 
 class DataEntityMetaFactory(MetaFactory):
@@ -70,30 +70,30 @@ class DataEntityMetaFactory(MetaFactory):
         Returns:
             bool: 如果cell是DataEntity类型的顶点返回True，否则False
         """
-        return isinstance(cell, age.models.Vertex) and  cell.label == "DataEntity"
+        return isinstance(cell, dict) and cell['label'] == "DataEntity"
 
-    def convert(self, cell, graph:AGEGraph):
+    def convert(self, cell, graph:BaseGraph):
         """将DataEntity顶点转换为数据实体元模型对象
         
         Args:
             cell: DataEntity顶点
-            graph: AGEGraph实例
+            graph: BaseGraph实例
             
         Returns:
             DataEntity: 数据实体元模型对象
         """
-        tables = self.load_tables(graph, cell.id)
+        tables = self.load_tables(graph, cell['id'])
 
-        return DataEntity(id=cell.id,
-                      name=cell.properties["name"],
-                      node=cell.label,
+        return DataEntity(id=cell['id'],
+                      name=cell["name"],
+                      node=cell['label'],
                       tables=tables)
 
-    def load_tables(self, graph:AGEGraph, entity_id:int):
+    def load_tables(self, graph:BaseGraph, entity_id:int):
         """加载数据实体对应的物理表
         
         Args:
-            graph: AGEGraph实例
+            graph: BaseGraph实例
             entity_id: 数据实体ID
             
         Returns:
@@ -102,12 +102,13 @@ class DataEntityMetaFactory(MetaFactory):
         tables = []
         # tbl_factory = PhysicalTableMetaFactory()
         result = graph.query("""
-                MATCH (e:DataEntity)-[:IMPLEMENTS]->(t:PhysicalTable) WHERE ID(e)=%s
+                MATCH (e:DataEntity)-[:IMPLEMENTS]->(t:PhysicalTable) 
+                WHERE ID(e)=%s
                 RETURN ID(t) as tbl_id, t.full_table_name as full_table_name
             """, (entity_id, ))
 
         for _r in result:
-            tables.append(dict(id=_r[0], full_table_name=_r[1]))
+            tables.append(dict(id=_r['tbl_id'], full_table_name=_r['full_table_name']))
         return tables
 
 
@@ -123,32 +124,32 @@ class PhysicalTableMetaFactory(MetaFactory):
         Returns:
             bool: 如果cell是PhysicalTable类型的顶点返回True，否则False
         """
-        return isinstance(cell, age.models.Vertex) and cell.label == "PhysicalTable"
+        return isinstance(cell, dict) and cell['label'] == "PhysicalTable"
 
-    def convert(self, cell, graph:AGEGraph):
+    def convert(self, cell, graph:BaseGraph):
         """将PhysicalTable顶点转换为物理表元模型对象
         
         Args:
             cell: PhysicalTable顶点
-            graph: AGEGraph实例
+            graph: BaseGraph实例
             
         Returns:
             PhysicalTable: 物理表元模型对象
         """
-        columns = self.load_columns(graph, cell.properties["full_table_name"])
-        return PhysicalTable(id=cell.id,
-                      name=cell.properties["name"],
-                      db_schema=cell.properties["schema"],
-                      table_name=cell.properties["table_name"],
-                      full_table_name=cell.properties["full_table_name"],
+        columns = self.load_columns(graph, cell["full_table_name"])
+        return PhysicalTable(id=cell['id'],
+                      name=cell["name"],
+                      db_schema=cell["schema"],
+                      table_name=cell["table_name"],
+                      full_table_name=cell["full_table_name"],
                       columns=columns,
-                      node=cell.label)
+                      node=cell['label'])
 
-    def load_columns(self, graph:AGEGraph, full_table_name:str) ->  List[Dict]:
+    def load_columns(self, graph:BaseGraph, full_table_name:str) ->  List[Dict]:
         """加载物理表对应的列信息
         
         Args:
-            graph: AGEGraph实例
+            graph: BaseGraph实例
             full_table_name: 物理表全名
             
         Returns:
@@ -161,8 +162,8 @@ class PhysicalTableMetaFactory(MetaFactory):
         columns:List[Dict] = []
 
         for _r in result:
-            col = _r[0]
-            d = dict(name=col.properties["name"], dtype=col.properties["dtype"])
+            col = _r["c"]
+            d = dict(name=col["name"], dtype=col["date_type"])
             columns.append(d)
         return columns
 
@@ -178,22 +179,22 @@ class ColumnMetaFactory(MetaFactory):
         Returns:
             bool: 如果cell是Column类型的顶点返回True，否则False
         """
-        return isinstance(cell, age.models.Vertex) and cell.label == "Column"
+        return isinstance(cell, dict) and cell['label'] == "Column"
 
-    def convert(self, cell, graph:AGEGraph):
+    def convert(self, cell, graph:BaseGraph):
         """将Column顶点转换为列元模型对象
         
         Args:
             cell: Column顶点
-            graph: AGEGraph实例
+            graph: BaseGraph实例
             
         Returns:
             Column: 列元模型对象
         """
-        return Column(id=cell.id,
-                      name=cell.properties["name"],
-                      dtype=cell.properties["dtype"],
-                      node=cell.label)
+        return Column(id=cell['id'],
+                      name=cell["name"],
+                      dtype=cell["data_type"],
+                      node=cell['label'])
 
 class BusinessTermMetaFactory(MetaFactory):
     """业务术语元模型工厂类，用于处理BusinessTerm类型顶点"""
@@ -206,24 +207,24 @@ class BusinessTermMetaFactory(MetaFactory):
         Returns:
             bool: 如果cell是BusinessTerm类型的顶点返回True，否则False
         """
-        return isinstance(cell, age.models.Vertex) and cell.label == "BusinessTerm"
+        return isinstance(cell, dict) and cell['label'] == "BusinessTerm"
 
-    def convert(self, cell, graph:AGEGraph):
+    def convert(self, cell, graph:BaseGraph):
         """将BusinessTerm顶点转换为业务术语元模型对象
         
         Args:
             cell: BusinessTerm顶点
-            graph: AGEGraph实例
+            graph: BaseGraph实例
             
         Returns:
             BusinessTerm: 业务术语元模型对象
         """
-        return BusinessTerm(id=cell.id,
-                            name=cell.properties["name"],
-                            definition=cell.properties["definition"],
-                            owner=cell.properties["owner"],
-                            status=cell.properties["status"],
-                            node=cell.label
+        return BusinessTerm(id=cell['id'],
+                            name=cell["name"],
+                            definition=cell["definition"],
+                            owner=cell["owner"],
+                            status=cell["status"],
+                            node=cell['label']
                             )
 
 class OtherMetaFactory(MetaFactory):
@@ -238,14 +239,14 @@ class OtherMetaFactory(MetaFactory):
         Returns:
             bool: 如果cell是顶点返回True，否则False
         """
-        return isinstance(cell, age.models.Vertex)
+        return isinstance(cell, dict) and cell['type'] == 'vertex'
 
-    def convert(self, cell, graph:AGEGraph):
+    def convert(self, cell, graph:BaseGraph):
         """将顶点转换为对应的元模型对象
         
         Args:
             cell: 顶点
-            graph: AGEGraph实例
+            graph: BaseGraph实例
             
         Returns:
             Any: 根据顶点类型动态创建的元模型对象
@@ -256,11 +257,11 @@ class OtherMetaFactory(MetaFactory):
             # 添加其他可能的标签和对应的类
         }
 
-        cls = class_map.get(cell.label)
+        cls = class_map.get(cell['label'])
         if cls:
-            return cls(id=cell.id, name=cell.properties["name"], node=cell.label)
+            return cls(id=cell['id'], name=cell["name"], node=cell['label'])
         else:
-            raise ValueError(f"Unknown vertex label: {cell.label}")
+            raise ValueError(f"Unknown vertex label: {cell['label']}")
 
 
 class RelatedToMetaFactory(MetaFactory):
@@ -275,24 +276,20 @@ class RelatedToMetaFactory(MetaFactory):
         Returns:
             bool: 如果cell是RELATED_TO类型的边返回True，否则False
         """
-        return isinstance(cell, age.models.Edge)  and  cell.label == "RELATED_TO"
+        return isinstance(cell, dict)  and  cell['label'] == "RELATED_TO"
 
-    def convert(self, cell, graph:AGEGraph):
+    def convert(self, cell, graph:BaseGraph):
         """将RELATED_TO边转换为关系元模型对象
         
         Args:
             cell: RELATED_TO边
-            graph: AGEGraph实例
+            graph: BaseGraph实例
             
         Returns:
             RelatedTo: 关系元模型对象
         """
-        if "rel" in cell.properties:
-            return RelatedTo(id=cell.id,
-                             from_id=cell.start_id,
-                             to_id=cell.end_id,
-                             rel=cell.properties["rel"])
-        return RelatedTo(id=cell.id, from_id=cell.start_id, to_id=cell.end_id)
+        rel = cell.get("rel", "")
+        return RelatedTo(id=cell['id'], from_id=cell['from_id'], to_id=cell['to_id'], rel=rel)
 
 class FlowsToMetaFactory(MetaFactory):
     """流到元模型工厂类，用于处理FLOWS_TO类型边"""
@@ -305,23 +302,23 @@ class FlowsToMetaFactory(MetaFactory):
         Returns:
             bool: 如果cell是FLOWS_TO类型的边返回True，否则False
         """
-        return isinstance(cell, age.models.Edge)  and  cell.label == "FLOWS_TO"
+        return isinstance(cell, dict)  and  cell['label'] == "FLOWS_TO"
 
-    def convert(self, cell, graph:AGEGraph):
+    def convert(self, cell, graph:BaseGraph):
         """将FLOWS_TO边转换为流到元模型对象
         
         Args:
             cell: FLOWS_TO边
-            graph: AGEGraph实例
+            graph: BaseGraph实例
             
         Returns:
             FlowsTo: 流到元模型对象
         """
-        return FlowsTo(id=cell.id, from_id=cell.start_id, to_id=cell.end_id)
+        return FlowsTo(id=cell['id'], from_id=cell['start_id'], to_id=cell['to_id'])
 
 def _age_obj_key(_, c:Any) -> int:
-    if isinstance(c, age.models.Vertex) or isinstance(c, age.models.Edge):
-        return hash(f"ID:{c.id}")
+    if isinstance(c, dict):
+        return hash(f"ID:{c['id']}")
     return hash(c)
 
 meta_obj_cache = TTLCache(maxsize=200, ttl=3000)
@@ -339,7 +336,7 @@ class MetadataHelper:
         FlowsToMetaFactory()
     ] # 元模型工厂列表
 
-    def __init__(self, graph:AGEGraph):
+    def __init__(self, graph:BaseGraph):
         self.graph = graph
 
     @cachedmethod(lambda _: meta_obj_cache, key=_age_obj_key)
@@ -356,7 +353,7 @@ class MetadataHelper:
                 d = factory.convert(c, self.graph)
                 return d
         if not isinstance(c, str) and not isinstance(c, int):
-            print("No implemented.", c)
+            logfire.warn("No implemented. {obj}", obj=c)
         return str(c)
 
     def _traverse_age_result(self,
@@ -370,7 +367,7 @@ class MetadataHelper:
         """
         for row in contents:
             _row = []
-            for cell in row:
+            for cell in row.values():
                 if isinstance(cell, list):
                     for _c in cell:
                         d = self._convert_age2model(_c)
