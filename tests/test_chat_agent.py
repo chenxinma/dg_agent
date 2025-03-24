@@ -7,25 +7,27 @@ from pydantic_ai.messages import (
     TextPart,
 )
 import logfire
-
+# pylint: disable=E0401
 from bot.chat_app import to_chat_message
 from bot.agent.dg_mind import do_it
 import bot.models as models
-
+from bot.settings import settings
 
 # 配置日志
-logfire.configure(environment='local')
+logfire.configure(environment='local', send_to_logfire=False)
 
 async def chat(prompt:str):
     """Streams new line delimited JSON `Message`s to the client."""
-    agent = Agent(models.infer_model("ollama:deepseek-r1:8b"),
+    _mode_setting = settings.get_setting("agents")["chat_agent"]
+
+    agent = Agent(models.infer_model(_mode_setting["model_name"], _mode_setting["api_key"]),
                   result_type=str,
                   system_prompt="根据提示内容，用中文回答做简单表述以Markdown格式输出。不要额外增加不存在的内容。",)
 
     answer = await do_it(prompt)
 
     question = f"""问题：{prompt}
-    回答参考：{answer.model_dump_json()}
+    回答参考：{answer}
 """
     async with agent.run_stream(question) as result:
         async for text in result.stream(debounce_by=0.01):

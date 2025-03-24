@@ -4,11 +4,12 @@ from __future__ import annotations as _annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import List, Union
+from typing import List, Union, Dict
 from pydantic_ai.messages import ModelMessage
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
 import sqlparse
+import logfire
 
 try:
     from . import (
@@ -42,14 +43,14 @@ class State:
 
     def add(self, o:Union[PhysicalTable, RelatedTo]):
         """添加元数据"""
-        if isinstance(o, PhysicalTable):
+        if isinstance(o, PhysicalTable) or isinstance(o, Dict):
             if o not in self.tables:
                 self.tables.append(o)
         elif isinstance(o, RelatedTo):
             if o not in self.rels:
                 self.rels.append(o)
         else:
-            raise ValueError("unknown type")
+            raise ValueError("unknown type", type(o))
 
     def add_all(self, o:List[Union[PhysicalTable, RelatedTo]]):
         """添加元数据列表"""
@@ -59,8 +60,7 @@ class State:
 
 @dataclass
 class PlanGen(BaseNode[State]):
-    """执行计划生成
-    """
+    """执行计划生成"""
     async def run(self, ctx: GraphRunContext[State]) -> StepRunner:
         result = await plan_agent.run(
             ctx.state.question,
@@ -82,16 +82,17 @@ class StepRunner(BaseNode[State, None, Union[PlanResponse, DataGovResponse, SQLR
             ctx.state.current_step = 0
             ctx.state.tables = []
             ctx.state.rels = []
-
+        logfire.info("Step: {current}", current=ctx.state.current_step)
         if ctx.state.current_step < len(ctx.state.plan.steps):
             step = ctx.state.plan.steps[ctx.state.current_step]
+
             ctx.state.current_step += 1
             if "sql_agent" == step.tool:
                 return SqlGen(prompt=step.prompt)
             elif "age_agent" == step.tool:
                 return MetaCypherGen(prompt=step.prompt)
         else:
-            return End(self.response) # 最后一次的步骤结果
+            return End(str(self.response)) # 最后一次的步骤结果
 
 
 @dataclass
@@ -160,29 +161,31 @@ class CypherExecutor(BaseNode[State, None, CypherQuery]):
         result:DataGovResponse = metadata_helper.query(self.query)
 
         # 如果描述为空，则重新执行Cypher生成
-        if result.description is None:
+        if result["description"] is None:
             return MetaCypherGen(prompt=self.query.explanation)
 
-        if len(result.contents) > 0:
-            self.collect_table_defines(result.contents, ctx.state)
+        if len(result["contents"]) > 0:
+            self.collect_table_defines(result["contents"], ctx.state)
             return StepRunner(result)
-        else:
-            return MetaCypherGen(prompt="未能获得内容请重新生成。" + self.query.explanation)
+
+        return MetaCypherGen(prompt="未能获得内容请重新生成。" + self.query.explanation)
 
 graph = Graph(nodes=(PlanGen, StepRunner, SqlGen, MetaCypherGen, CypherExecutor))
 
+metadata_graph = AGEGraph(graph_name=settings.get_setting("age")["graph"],
+                          dsn=settings.get_setting("age")["dsn"])
+
 async def do_it(question: str):
     """执行任务"""
-    _metadata_graph = AGEGraph(graph_name=settings.get_setting("age")["graph"],
-                      dsn=settings.get_setting("age")["dsn"])
     state = State(question=question,
-                  metadata_graph=_metadata_graph)
+                  metadata_graph=metadata_graph)
+    node = PlanGen()
+    end = await graph.run(node, state=state)
 
-    result, _ = await graph.run(PlanGen(), state=state)
     # for msg in state.agent_messages:
     #     if isinstance(msg, ModelResponse):
     #         print(msg)
-    return result
+    return end
 
 def to_marimo():
     """运行图"""

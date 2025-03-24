@@ -2,8 +2,9 @@
 import pytest
 
 import logfire
-from bot.graph.age_graph import AGEGraph, AGEQueryException
 
+# pylint: disable=E0401
+from bot.graph.age_graph import AGEGraph, AGEQueryException
 from bot.settings import settings
 
 # 配置日志

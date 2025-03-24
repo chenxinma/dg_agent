@@ -167,7 +167,7 @@ class AGEGraph(BaseGraph):
                 )
 
                 # raise exception if RETURN * is found as we can't resolve the fields
-                clean_fileds = [f.strip() for f in fields if f.strip()]
+                clean_fileds = [f.strip().replace('.', '_') for f in fields if f.strip()]
                 if "*" in clean_fileds:
                     raise ValueError(
                         "Apache Age does not support RETURN * in Cypher queries"
@@ -302,6 +302,30 @@ class AGEGraph(BaseGraph):
                 result = [AGEGraph._record_to_dict(d, fields) for d in data]
             return result
 
+    def execuate(self, query: str, params:Sequence=None, auto_commit:bool=True):
+        """
+        执行DDL
+        """
+        _wrap_query = AGEGraph._wrap_query(query, self.graph_name)
+        # execute the query, rolling back on an error
+        _age = self._get_age()
+        with _age.connection.cursor() as curs:
+            try:
+                if params is None:
+                    curs.execute(_wrap_query)
+                else:
+                    curs.execute(_wrap_query, params)
+            except age.SqlExecutionError as e:
+                _age.rollback()
+                raise AGEQueryException(
+                    {
+                        "message": f"Error executing graph query: {query}",
+                        "detail": str(e),
+                    }
+                ) from e
+        if auto_commit:
+            _age.commit()
+
     def explain(self, query: str):
         """
         执行查询计划 验证SQL
@@ -321,7 +345,8 @@ class AGEGraph(BaseGraph):
         assert _conn is not None
         with _conn.cursor() as curs:
             curs.execute(f"""SELECT "name", kind
-                             FROM ag_catalog.ag_label WHERE graph = {self.graphid}""")
+                             FROM ag_catalog.ag_label WHERE graph = {self.graphid}
+                             AND not "name" like '\\_ag\\_%'""")
             labels = curs.fetchall()
             e_labels = [l[0] for l in labels if l[1] == "e"]
             n_labels = [l[0] for l in labels if l[1] == "v"]
@@ -522,6 +547,7 @@ class AGEGraph(BaseGraph):
         triple_schema = self._get_triples(e_labels)
 
         node_properties = self._get_node_properties(n_labels)
+        node_properties = self._get_node_properties(n_labels)
         edge_properties = self._get_edge_properties(e_labels)
 
         # 生成图谱结构描述
@@ -529,6 +555,7 @@ class AGEGraph(BaseGraph):
 ## 图数据库结构:
 ### 节点：
 {n_labels}
+{node_properties}
 {node_properties}
 ### 关联:
 {e_labels}

@@ -2,6 +2,7 @@
 import asyncio
 
 import logfire
+# pylint: disable=E0401
 from bot.agent.dg_mind import do_it
 
 # 配置日志

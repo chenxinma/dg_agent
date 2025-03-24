@@ -45,7 +45,7 @@ origins = [
 ]
 
 WEBROOT_DIR = Path(__file__).parent.joinpath('web')
-usage_limits = UsageLimits(request_limit=10, total_tokens_limit=20000)
+usage_limits = UsageLimits(request_limit=10, total_tokens_limit=32768)
 
 @asynccontextmanager
 async def lifespan(_app: fastapi.FastAPI):

@@ -13,11 +13,12 @@ dependencies = [
     "lxml>=5.3.1",
     "mcp[cli]>=1.4.1",
     "openpyxl>=3.1.5",
-    "opentelemetry-instrumentation-asgi>=0.52b0",
+    "opentelemetry-api==1.28.0",
+    "opentelemetry-exporter-otlp>=1.28.0",
+    "opentelemetry-sdk>=1.28.0",
     "pandas>=2.2.3",
     "psycopg2-binary>=2.9.10",
-    "pydantic-ai>=0.0.40",
-    "pytest>=8.3.5",
+    "pydantic-ai==0.0.42",
     "python-multipart>=0.0.20",
     "sqlparse>=0.5.3",
     "uvicorn>=0.34.0",
@@ -30,3 +31,16 @@ ignore_no_config=true
 
 [tool.uv.sources]
 age = { path = "./drivers/age-1.0.0-py3-none-any.whl" }
+
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+]
+pythonpath = [
+  "."
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]

@@ -1,10 +1,15 @@
 """dg_support_agent tests"""
+import sys
 import asyncio
+from pathlib import Path
+
 import pytest
 import logfire
+
+# pylint: disable=C0413
+# pylint: disable=E0401
 from bot.graph.age_graph import AGEGraph
 from bot.agent.dg_support import dg_support_agent, SupportResponse
-
 from bot.settings import settings
 
 # 配置日志
@@ -27,7 +32,7 @@ class TestDataGovSupportAgent:
         result = await dg_support_agent.run(question, deps=self.age_graph)
         return result.data
 
-    @pytest.mark.skip()
+    # @pytest.mark.skip()
     def test_ask_01(self):
         """测试ask"""
         question = "列出所有业务域"
@@ -48,6 +53,7 @@ class TestDataGovSupportAgent:
         result = asyncio.run(self.call_agent(question))
         print(result)
 
+    @pytest.mark.skip()
     def test_ask_04(self):
         """测试ask"""
         question = "统计本月按结算'客户账单'的收款匹配金额"

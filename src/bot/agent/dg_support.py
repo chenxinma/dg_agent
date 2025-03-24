@@ -145,7 +145,6 @@ class DataGovSupportAgentFactory(AgentFactory):
             return ctx.deps.schema + \
                   "\n" + _EXAMPLES
 
-
         agent = Agent(
             models.infer_model(_mode_setting["model_name"], _mode_setting["api_key"]),
             model_settings={'temperature': 0.0},
@@ -158,6 +157,7 @@ class DataGovSupportAgentFactory(AgentFactory):
                 " 此时可以通过使用'cypher_query'工具执行Cypher获得结果直接反馈。",
                 "+ 你会被问数据统计查询相关的问题，可以通过'cypher_query'工具获得物理表的定义(获得的物理表内包含表名、列信息，不需要额外获取)，然后根据物理表定义来编写SQL查询，" +
                 " 此时可以通过'sql_validate'验证生成的SQL是否正确。",
+                "+ 你会被问及一些业务定义和术语说明，此时可以通过'cypher_query'工具执行Cypher查询'业务术语(BusinessTerm)'获得结果。",
                 "注意：请不要使用'cypher_query'工具执行SQL查询。",
                 "注意：对name属性的查询例如数据实体名、应用名、业务域名等，不要翻译。",
                 "注意：工具使用后的结果应组织成合适的MarkDown文本格式回复。",
