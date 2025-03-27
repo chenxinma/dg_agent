@@ -24,6 +24,9 @@ dependencies = [
     "uvicorn>=0.34.0",
 ]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.logfire]
 project_name="DG Agent"
 console_colors="never"
@@ -33,9 +36,8 @@ ignore_no_config=true
 age = { path = "./drivers/age-1.0.0-py3-none-any.whl" }
 
 [tool.pytest.ini_options]
-addopts = [
-    "--import-mode=importlib",
-]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
 pythonpath = [
   "."
 ]

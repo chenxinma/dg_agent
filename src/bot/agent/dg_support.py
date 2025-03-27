@@ -93,8 +93,8 @@ RETURN e2
 class DataGovSupportAgentFactory(AgentFactory):
     """数据治理知识支持Agent"""
     @staticmethod
-    def get_agent() -> Agent:
-        _mode_setting = settings.get_setting("agents")["plan_agent"]
+    def get_agent() -> Agent[AGEGraph, str]:
+        """获取数据治理知识支持Agent"""
 
         def _wrap_cypher(cypher: str) -> str:
             c = cypher.replace("\\n", "\n")
@@ -145,8 +145,10 @@ class DataGovSupportAgentFactory(AgentFactory):
             return ctx.deps.schema + \
                   "\n" + _EXAMPLES
 
+        model_name = settings.get_setting("agents.plan_agent.model_name")
+        api_key = settings.get_setting("agents.plan_agent.api_key")
         agent = Agent(
-            models.infer_model(_mode_setting["model_name"], _mode_setting["api_key"]),
+            models.infer_model(model_name, api_key=api_key), # pyright: ignore[reportArgumentType]
             model_settings={'temperature': 0.0},
             deps_type=AGEGraph,
             result_type=str,
@@ -165,8 +167,8 @@ class DataGovSupportAgentFactory(AgentFactory):
         )
 
         agent.system_prompt(get_graph_schema)
-        agent.tool(cypher_query, require_parameter_descriptions=True)
-        agent.tool_plain(sql_validate, require_parameter_descriptions=True)
+        agent.tool(cypher_query, require_parameter_descriptions=True) # pyright: ignore[reportCallIssue]
+        agent.tool_plain(sql_validate, require_parameter_descriptions=True) # pyright: ignore[reportCallIssue]
 
         return agent
 

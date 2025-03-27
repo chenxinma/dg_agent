@@ -37,8 +37,8 @@ class MetadataSturture:
         tables_df["full_table_name"] = tables_df["schema"] + "." + tables_df["table_name"]
         tables_df["dataentity_nid"] = tables_df.apply(lambda x: generate_unique_id(x.app_name +"."+ x["name"]), axis=1)
         tables_df["nid"] = tables_df["full_table_name"].apply(generate_unique_id)
-        tables_df.rename(columns={"name": "entity_name"}, inplace=True)
-        tables_df[["schema", "table_name", "full_table_name", "nid"]] \
+        # tables_df.rename(columns={"name": "entity_name"}, inplace=True)
+        tables_df[["name", "nid", "schema", "table_name", "full_table_name"]] \
             .to_csv(os.path.join(output_dir, "v_PhysicalTable.csv"), index=False)
 
         # 保存列信息
@@ -48,7 +48,7 @@ class MetadataSturture:
         columns_df.rename(columns={"Column": "name", "Type": "data_type"}, inplace=True)
         columns_df = pd.DataFrame(columns_df[
             columns_df["Table"].isin(tables_df["schema"] + "." + tables_df["table_name"])])
-        columns_df[["name", "data_type", "nid"]].to_csv(os.path.join(output_dir, "v_Column.csv"), index=False)
+        columns_df[["name", "nid", "data_type"]].to_csv(os.path.join(output_dir, "v_Column.csv"), index=False)
 
         # 保存关联关系
         implements = []

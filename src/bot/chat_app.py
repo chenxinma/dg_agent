@@ -51,8 +51,8 @@ usage_limits = UsageLimits(request_limit=10, total_tokens_limit=32768)
 async def lifespan(_app: fastapi.FastAPI):
     """资源初始化"""
     _metadata_graph = \
-        AGEGraph(graph_name=settings.get_setting("age")["graph"],
-                dsn=settings.get_setting("age")["dsn"])
+        AGEGraph(graph_name=settings.get_setting("age.graph"),
+                dsn=settings.get_setting("age.dsn"))
     yield {'metadata_graph': _metadata_graph}
 
 app = fastapi.FastAPI(lifespan=lifespan)
@@ -103,7 +103,7 @@ def to_chat_message(m: ModelMessage) -> ChatMessage:
             return {
                 'role': 'user',
                 'timestamp': first_part.timestamp.isoformat(),
-                'content': first_part.content,
+                'content': first_part.content, # pyright: ignore[reportReturnType]
             }
     elif isinstance(m, ModelResponse):
         if isinstance(first_part, TextPart):
@@ -159,7 +159,7 @@ async def post_chat(
                                         output_messages.append(event.delta.content_delta)
                                         m = ModelResponse(parts=[
                                             TextPart("".join(output_messages))],
-                                            timestamp=_timestamp)
+                                            timestamp=_timestamp) # pyright: ignore[reportArgumentType]
                                         yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
                     elif Agent.is_call_tools_node(node):
                         # A handle-response node => The model returned some data,
@@ -172,14 +172,14 @@ async def post_chat(
                                         f'开始 ID={event.part.tool_call_id!r} \n\n'
                                     )
                                     m = ModelResponse(parts=[TextPart("".join(output_messages))],
-                                                    timestamp=_timestamp)
+                                                    timestamp=_timestamp)# pyright: ignore[reportArgumentType]
                                     yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
                                 elif isinstance(event, FunctionToolResultEvent):
                                     output_messages.append(
                                         f'[Tools] ID={event.tool_call_id!r} 完成。\n\n'
                                     )
                                     m = ModelResponse(parts=[TextPart("".join(output_messages))],
-                                                    timestamp=_timestamp)
+                                                    timestamp=_timestamp)# pyright: ignore[reportArgumentType]
                                     yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
         except asyncio.CancelledError:
             print("Stream cancelled.")
