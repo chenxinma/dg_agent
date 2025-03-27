@@ -1,11 +1,16 @@
 .logfire
 .vscode
+.venv
 .pytest_cache
 settings.yaml
 **/__pycache__
+**/*.egg-info
 
 build
 dist
-graph/files/*
+src/make_graph/files/*
 
 sql_lab.py
+
+__marimo__
+uv.lock
