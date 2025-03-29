@@ -302,19 +302,19 @@ class AGEGraph(BaseGraph):
                 result = [AGEGraph._record_to_dict(d, fields) for d in data]
             return result
 
-    def execuate(self, query: str, params:Sequence=None, auto_commit:bool=True):
+    def execuate(self, query: str, params:Sequence | None =None, auto_commit:bool=True):
         """
         执行DDL
         """
         _wrap_query = AGEGraph._wrap_query(query, self.graph_name)
         # execute the query, rolling back on an error
         _age = self._get_age()
-        with _age.connection.cursor() as curs:
+        with _age.connection.cursor() as curs: # pyright: ignore
             try:
                 if params is None:
-                    curs.execute(_wrap_query)
+                    curs.execute(_wrap_query) # pyright: ignore
                 else:
-                    curs.execute(_wrap_query, params)
+                    curs.execute(_wrap_query, params) # pyright: ignore
             except age.SqlExecutionError as e:
                 _age.rollback()
                 raise AGEQueryException(

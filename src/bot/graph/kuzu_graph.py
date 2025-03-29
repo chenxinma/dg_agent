@@ -54,24 +54,22 @@ class KuzuGraph(BaseGraph):
         self.conn = kuzu.Connection(self.db)
         self.refresh_schema()
 
-    @staticmethod
-    def _format_triples(triples: List[Dict[str, str]]) -> List[str]:
+    def explain(self, query: str, params: Dict[str, Any] | None = None):
         """
-        Convert a list of relationships from dictionaries to formatted strings
-        to be better readable by an llm
-
-        Args:
-            triples (List[Dict[str,str]]): a list relationships in the form
-                {'start':<from_label>, 'type':<edge_label>, 'end':<from_label>}
-
-        Returns:
-            List[str]: a list of relationships in the form
-                "(:`<from_label>`)-[:`<edge_label>`]->(:`<to_label>`)"
+        执行查询计划
         """
-        triple_template = "(:`{start}`)-[:`{type}`]->(:`{end}`)"
-        triple_schema = [triple_template.format(**triple) for triple in triples]
-
-        return triple_schema
+        try:
+            if params is None:
+                self.conn.execute(query)
+            else:
+                self.conn.execute(query, params)
+        except Exception as e:
+            raise KuzuQueryException(
+                {
+                    "message": f"Error executing graph query: {query}",
+                    "detail": str(e),
+                }
+            ) from e
 
     def query(self, query: str, params: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
         """
@@ -97,152 +95,59 @@ class KuzuGraph(BaseGraph):
                 }
             ) from e
 
-
-    def _get_labels(self) -> Tuple[List[str], List[str]]:
-        """
-        获取 labels
-        """
-        # 这里需要根据 Kuzu 的 API 来实现获取节点和边的标签
-        # 示例代码，需要根据实际情况修改
-        node_labels = []
-        edge_labels = []
-        return node_labels, edge_labels
-
-    def _get_triples(self, e_labels: List[str]) -> List[Dict[str, str]]:
-        """
-        Get a set of distinct relationship types (as a list of dicts) in the graph
-        to be used as context by an llm.
-
-        Args:
-            e_labels (List[str]): a list of edge labels to filter for
-
-        Returns:
-            List[Dict[str, str]]: relationships as a list of dicts in the format
-                "{'start':<from_label>, 'type':<edge_label>, 'end':<from_label>}"
-        """
-        triple_schema = []
-        for label in e_labels:
-            # 这里需要根据 Kuzu 的 API 来实现查询关系类型
-            # 示例代码，需要根据实际情况修改
-            query = f"MATCH (a)-[e:{label}]->(b) RETURN labels(a) AS from, type(e) AS edge, labels(b) AS to"
-            result = self.query(query)
-            for row in result:
-                # Bug 修复：确保字典正确添加到 triple_schema 列表中
-                triple_schema.append(
-                    {
-                        "start": row["from"][0],
-                        "type": row["edge"],
-                        "end": row["to"][0],
-                    }
-                )
-        return triple_schema
-
-    def _get_node_properties(self, n_labels: List[str]) -> List[Dict[str, Any]]:
-        """
-        Fetch a list of available node properties by node label to be used
-        as context for an llm
-
-        Args:
-            n_labels (List[str]): a list of node labels to filter for
-
-        Returns:
-            List[Dict[str, Any]]: a list of node labels and
-                their corresponding properties in the form
-                "{
-                    'labels': <node_label>,
-                    'properties': [
-                        {
-                            'property': <property_name>,
-                            'type': <property_type>
-                        },...
-                        ]
-                }"
-        """
-        node_properties = []
-        for label in n_labels:
-            # 这里需要根据 Kuzu 的 API 来实现查询节点属性
-            # 示例代码，需要根据实际情况修改
-            query = f"MATCH (a:{label}) RETURN properties(a) AS props"
-            result = self.query(query)
-            s = set()
-            for row in result:
-                for k, v in row["props"].items():
-                    s.add((k, self.types[type(v).__name__]))
-            np = {
-                "properties": [{"property": k, "type": v} for k, v in s],
-                "labels": label,
-            }
-            node_properties.append(np)
-        return node_properties
-
-    def _get_edge_properties(self, e_labels: List[str]) -> List[Dict[str, Any]]:
-        """
-        Fetch a list of available edge properties by edge label to be used
-        as context for an llm
-
-        Args:
-            e_labels (List[str]): a list of edge labels to filter for
-
-        Returns:
-            List[Dict[str, Any]]: a list of edge labels
-                and their corresponding properties in the form
-                "{
-                    'labels': <edge_label>,
-                    'properties': [
-                        {
-                            'property': <property_name>,
-                            'type': <property_type>
-                        },...
-                        ]
-                }"
-        """
-        edge_properties = []
-        for label in e_labels:
-            # 这里需要根据 Kuzu 的 API 来实现查询边属性
-            # 示例代码，需要根据实际情况修改
-            query = f"MATCH ()-[e:{label}]->() RETURN properties(e) AS props"
-            result = self.query(query)
-            s = set()
-            for row in result:
-                for k, v in row["props"].items():
-                    s.add((k, self.types[type(v).__name__]))
-            np = {
-                "properties": [{"property": k, "type": v} for k, v in s],
-                "type": label,
-            }
-            edge_properties.append(np)
-        return edge_properties
+    def _wrap_name(self, name: str) -> str:
+        """Wrap name with backticks."""
+        if name in ['Column']:
+            return f"`{name}`"
+        return name
 
     def refresh_schema(self) -> None:
-        """
-        刷新 schema
-        更新 labels, relationships, and properties
-        """
-        n_labels, e_labels = self._get_labels()
-        triple_schema = self._get_triples(e_labels)
+        """Refreshes the Kùzu graph schema information"""
+        node_properties = []
+        node_table_names = self.conn._get_node_table_names()
+        for table_name in node_table_names:
+            current_table_schema = {"properties": [], "label": self._wrap_name(table_name)}
+            properties = self.conn._get_node_property_names(table_name)
+            for property_name in properties:
+                property_type = properties[property_name]["type"]
+                list_type_flag = ""
+                if properties[property_name]["dimension"] > 0:
+                    if "shape" in properties[property_name]:
+                        for s in properties[property_name]["shape"]:
+                            list_type_flag += "[%s]" % s
+                    else:
+                        for i in range(properties[property_name]["dimension"]):
+                            list_type_flag += "[]"
+                property_type += list_type_flag
+                current_table_schema["properties"].append(
+                    (property_name, property_type)
+                )
+            node_properties.append(current_table_schema)
 
-        # node_properties = self._get_node_properties(n_labels)
-        edge_properties = self._get_edge_properties(e_labels)
+        relationships = []
+        rel_tables = self.conn._get_rel_table_names()
+        for table in rel_tables:
+            relationships.append(
+                "(:%s)-[:%s]->(:%s)" % (self._wrap_name(table["src"]), table["name"], self._wrap_name(table["dst"]))
+            )
 
-        # 生成图谱结构描述
-        self._schema : str = f"""
-## 图数据库结构:
-### 节点：
-{n_labels}
-### 关联:
-{e_labels}
-{edge_properties}
-## 节点关联关系:
-{KuzuGraph._format_triples(triple_schema)}"""
-        logfire.info("Refresh schema completed.")
+        rel_properties = []
+        for table in rel_tables:
+            table_name = self._wrap_name(table["name"])
+            current_table_schema = {"properties": [], "label": table_name}
+            query_result = self.conn.execute(
+                f"CALL table_info('{table_name}') RETURN *;"
+            )
+            while query_result.has_next(): # pyright: ignore[reportAttributeAccessIssue]
+                row = query_result.get_next()# pyright: ignore[reportAttributeAccessIssue]
+                prop_name = row[1]
+                prop_type = row[2]
+                current_table_schema["properties"].append((prop_name, prop_type))
+            rel_properties.append(current_table_schema)
 
-    @property
-    def schema(self) -> str:
-        """Returns the schema of the Graph"""
-        return self._schema
-
-    # @property
-    # def structured_schema(self) -> Dict[str, Any]:
-    #     """Returns the structured schema of the Graph"""
-    #     return self._structured_schema
-
+        self.schema = (
+            "## 图数据库结构:\n"
+            f"节点：{node_properties}\n"
+            f"关联: {rel_properties}\n"
+            f"节点关联关系: {relationships}\n"
+        )

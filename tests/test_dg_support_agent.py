@@ -8,7 +8,8 @@ import logfire
 
 # pylint: disable=C0413
 # pylint: disable=E0401
-from bot.graph.age_graph import AGEGraph
+# from bot.graph.age_graph import AGEGraph
+from bot.graph.kuzu_graph import KuzuGraph
 from bot.agent.dg_support import dg_support_agent, SupportResponse
 from bot.settings import settings
 
@@ -17,20 +18,17 @@ logfire.configure(environment='local', send_to_logfire=False)
 
 class TestDataGovSupportAgent:
     """DataGovSupportAgent tests"""
-    age_graph:AGEGraph
+    kuzu_graph:KuzuGraph
 
     def setup_method(self):
         """初始化"""
-        g_name = settings.get_setting("age")["graph"]
-        dsn = settings.get_setting("age")["dsn"]
-
-        self.age_graph = AGEGraph(graph_name=g_name, dsn=dsn)
+        self.kuzu_graph = KuzuGraph(settings.get_setting("kuzu.database"))
 
     async def call_agent(self, question: str) -> SupportResponse:
         """调用agent"""
 
-        result = await dg_support_agent.run(question, deps=self.age_graph)
-        return result.data
+        result = await dg_support_agent.run(question, deps=self.kuzu_graph)
+        return result.data # pyright: ignore
 
     # @pytest.mark.skip()
     def test_ask_01(self):

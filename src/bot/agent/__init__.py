@@ -28,9 +28,9 @@ class AgentFactory:
         pass
 
     @staticmethod
-    def get_agent() -> Agent:
+    def get_agent() -> Agent: # pyright: ignore[reportReturnType]
         """make a agent"""
-
+        pass
 
 
 class DataGovResponse(TypedDict):

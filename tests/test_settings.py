@@ -8,4 +8,4 @@ def test_01():
     
 def test_02():
     """age"""
-    print(settings.get_setting("age")["graph"])
+    print(settings.get_setting("age.graph"))

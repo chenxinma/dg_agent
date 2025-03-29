@@ -54,7 +54,7 @@ def load_data(directory: str) -> dict[str, list[str]]:
             ddl_set["create_node"].append(ddl)
 
         fpath = Path(os.path.join(directory, node_file))
-        ddl_set["insert_node"].append(f"COPY `{label}` FROM \"{fpath.as_posix()}\" (header=true)")
+        ddl_set["insert_node"].append(f"COPY `{label}` FROM \"{fpath.as_posix()}\" (header=true, parallel=false)")
 
 
     # 后导入边文件
