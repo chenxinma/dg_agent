@@ -15,85 +15,21 @@ import sqlparse
 try:
     import bot.models as models
     from . import SQLResponse, DataGovResponse, AgentFactory, CypherQuery, InvalidRequest
-    from .metadata_tools import MetadataHelper
 finally:
     pass
-from bot.graph.age_graph import AGEGraph
+# from bot.graph.age_graph import AGEGraph
+from bot.graph import KuzuGraph
+from bot.graph.ontology.kuzu import MetadataHelper, EXAMPLES as _EXAMPLES
 from bot.settings import settings
 
 SupportResponse: TypeAlias = Union[InvalidRequest, SQLResponse, DataGovResponse]
 
-_EXAMPLES = """
-## 参考以下示例生成Cypher查询语句。
-
-需求：查询某个数据实体对应的物理表
-查询：
-MATCH (e:DataEntity {name: 'EntityName'})-[:IMPLEMENTS]->(t:PhysicalTable)
-RETURN e, t
--- 替换 EntityName 为目标数据实体的名称。
-
-需求：查找与某个数据实体对应的物理表名称
-查询：
-MATCH (e:DataEntity {name: 'EntityName'})-[:IMPLEMENTS]->(t:PhysicalTable)
-RETURN t.full_table_name as full_table_name
--- 替换 EntityName 为目标数据实体的名称。
-
-需求：查询两个关联实体及其物理表
-查询：
-MATCH (e1:DataEntity {name: 'EntityName'})-[r]->(e2:DataEntity),
-    (e1)-[:IMPLEMENTS]->(t1:PhysicalTable),
-    (e2)-[:IMPLEMENTS]->(t2:PhysicalTable)
-RETURN e1, e2, r, t1, t2
--- 替换 EntityName 为目标数据实体的名称。
-
-需求：查询某个应用关联的所有数据实体
-查询：
-MATCH (app:Application {name: 'ApplicationName'})-[r]-(e:DataEntity)
-RETURN app, e
--- 替换 ApplicationName 为目标应用程序的名称。
-
-需求：查询某个应用关联的所有数据实体及其物理表
-查询：
-MATCH (app:Application {name: 'ApplicationName'})-[r]-(e:DataEntity)-[:IMPLEMENTS]->(t:PhysicalTable)
-RETURN app, e, t
--- 替换 ApplicationName 为目标应用程序的名称。
-
-需求：查找业务域下的所有实体
-查询：
-MATCH (d:BusinessDomain {name: 'DomainName'})-[:CONTAINS]-(a:Application)-[r]-(e:DataEntity)
-RETURN e
--- 替换 DomainName 为目标业务域的名称。
-
-需求：列出前 n 个数据实体
-查询：
-MATCH (e:DataEntity)
-RETURN e
-LIMIT n
--- 替换 n 为目标数量（例如 10）
-
-需求：统计某个业务域下所有应用程序的数量
-查询：
-MATCH (d:BusinessDomain {name: 'DomainName'})-[:CONTAINS]-(a:Application)
-RETURN count(a) AS application_count
--- 替换 DomainName 为目标业务域的名称。
-
-需求：查找两个数据实体之间的连接关系。
-查询：
-MATCH (e1:DataEntity {name: 'Entity1'})-[r:RELATED_TO*1..2]->(e2:DataEntity {name: 'Entity2'})
-RETURN e1,r,e2
--- 替换 Entity1 和 Entity2 为目标数据实体的名称。
-
-需求：查找某个数据实体的所有复制实体。
-查询：
-MATCH (e1:DataEntity {name: 'EntityName'})-[:FLOWS_TO]-(e2:DataEntity)
-RETURN e2
--- 替换 EntityName 为目标数据实体的名称。
-"""
+metadata_helper = MetadataHelper()
 
 class DataGovSupportAgentFactory(AgentFactory):
     """数据治理知识支持Agent"""
     @staticmethod
-    def get_agent() -> Agent[AGEGraph, str]:
+    def get_agent() -> Agent[KuzuGraph, str]:
         """获取数据治理知识支持Agent"""
 
         def _wrap_cypher(cypher: str) -> str:
@@ -102,7 +38,7 @@ class DataGovSupportAgentFactory(AgentFactory):
                 c = c[:-1]
             return c
 
-        def cypher_query(ctx: RunContext[AGEGraph], query: CypherQuery) -> DataGovResponse:
+        def cypher_query(ctx: RunContext[KuzuGraph], query: CypherQuery) -> DataGovResponse:
             """Graph query executor
             
             Args:
@@ -113,20 +49,22 @@ class DataGovSupportAgentFactory(AgentFactory):
             # vaildate cypher
             with logfire.span("Validate query"):
                 if not query.cypher.upper().startswith('MATCH'):
-                    raise ModelRetry('请编写一个MATCH的查询。')
+                    raise ModelRetry('请编写一个MATCH的查询。') 
 
-                query.cypher = _wrap_cypher(query.cypher)
+            with logfire.span("Execute query"):
                 try:
-                    _graph.explain(query.cypher)
+                    _wraped_cypher = _wrap_cypher(query.cypher)
+                    contents = metadata_helper.query(_wraped_cypher, _graph)
                 except Exception as e:
                     logfire.warn('错误查询: {e}', e=e)
                     logfire.warn('Cypher {q}', q=query.cypher)
                     raise ModelRetry(f'错误查询: {e}') from e
-
-            with logfire.span("Execute query"):
-                metadata_helper : MetadataHelper = MetadataHelper(_graph)
-                result:DataGovResponse = metadata_helper.query(query)
-
+                if not contents:
+                    raise ModelRetry('未找到相关结果，请重新查询。')
+                result : DataGovResponse = {
+                    "contents":contents,
+                    "description": query.explanation
+                }
             return result
 
         def sql_validate(sql: str) -> SQLResponse:
@@ -141,7 +79,7 @@ class DataGovSupportAgentFactory(AgentFactory):
 
             return SQLResponse(sql=_wrap_sql)
 
-        def get_graph_schema(ctx: RunContext[AGEGraph]) -> str:
+        def get_graph_schema(ctx: RunContext[KuzuGraph]) -> str:
             return ctx.deps.schema + \
                   "\n" + _EXAMPLES
 
@@ -150,7 +88,7 @@ class DataGovSupportAgentFactory(AgentFactory):
         agent = Agent(
             models.infer_model(model_name, api_key=api_key), # pyright: ignore[reportArgumentType]
             model_settings={'temperature': 0.0},
-            deps_type=AGEGraph,
+            deps_type=KuzuGraph,
             result_type=str,
             system_prompt=(
                 "你是一个数据治理知识支持助手。"

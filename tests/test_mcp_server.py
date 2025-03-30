@@ -12,7 +12,7 @@ logfire.configure(environment='local', send_to_logfire=False,)
 
 server_params = StdioServerParameters(
     command="python", # Executable
-    args=["src\\bot\\mcp_server.py"], # Optional command line arguments
+    args=["src\\bot\\mcp_cypher_server.py"], # Optional command line arguments
     env=None # Optional environment variables
 )
 
@@ -42,7 +42,7 @@ async def run():
             print("tools", tools)
 
             # Read a resource
-            content, mime_type = await session.read_resource("schema://data_governance")
+            content, mime_type = await session.read_resource("schema://data_governance") # pyright: ignore[reportArgumentType]
             print("content and mime_type", content, mime_type)
 
             # Call a tool
