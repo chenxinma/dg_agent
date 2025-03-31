@@ -62,18 +62,27 @@ kuzu:
 
 ```mermaid
 ---
-title: dg mind 
+title: 元模型的 知识图谱构建过程
 ---
-stateDiagram-v2
-  [*] --> PlanGen
-  PlanGen --> StepRunner
-  StepRunner --> MetaCypherGen
-  StepRunner --> SqlGen
-  StepRunner --> [*]
-  SqlGen --> StepRunner
-  MetaCypherGen --> AgeCypherQuery
-  AgeCypherQuery --> MetaCypherGen
-  AgeCypherQuery --> StepRunner
+flowchart TB
+   subgraph 整理阶段
+      F1[/数据库设计 ER/]-->H1[[数据架构审核]]
+      H1-->|输出|id1[/"企业数据模型 (XML)"/]
+      F2[/业务术语/]-->LLM["LLM 格式转换"]
+      LLM-->|输出|id2[/"结构化业务术语表 (Excel)"/]
+      mdb[(数据库元数据)]-->OP[[数据映射关系整理]]
+      OP-->|输出|id3[/"数据实体-物理表映射表 (Excel)"/]
+   end
+   subgraph 导入阶段
+      id1-->reload[模型标准化转换]
+      id2-->reload
+      id3-->reload
+    
+      
+      reload--格式转换-->csv[/"顶点 & 边数据 (CSV)"/]
+      csv-->csv2graph["CSV 转图数据引擎"]
+      csv2graph-->dg[(数据治理元模型知识图谱)]
+   end
 ```
 
 
