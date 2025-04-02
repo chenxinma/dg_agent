@@ -50,7 +50,7 @@ class KuzuGraph(BaseGraph):
 
     def __init__(self, db_path: str) -> None:
         self.db_path: str = db_path
-        self.db = kuzu.Database(db_path)
+        self.db = kuzu.Database(db_path, read_only=True)
         self.conn = kuzu.Connection(self.db)
         self.refresh_schema()
 

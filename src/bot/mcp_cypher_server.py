@@ -16,9 +16,10 @@ sys.path.append(str(MCP_DIR))
 
 try:
     from bot.agent import DataGovResponse, CypherQuery
-    # from bot.graph.age_graph import AGEGraph
-    from bot.graph.kuzu_graph import KuzuGraph
-    from bot.graph.ontology.kuzu import MetadataHelper, EXAMPLES as _EXAMPLES
+    from bot.graph.age_graph import AGEGraph
+    # from bot.graph.kuzu_graph import KuzuGraph
+    from bot.graph.ontology.age import MetadataHelper, EXAMPLES as _EXAMPLES
+    # from bot.graph.ontology.kuzu import MetadataHelper, EXAMPLES as _EXAMPLES
     from bot.settings import Settings
 finally:
     pass
@@ -32,11 +33,14 @@ class MCPRetry(Exception):
     """Retry exception"""
 
 @asynccontextmanager
-async def app_lifespan(_server: Server) -> AsyncIterator[Dict[str, KuzuGraph]]:
+async def app_lifespan(_server: Server) -> AsyncIterator[Dict[str, AGEGraph]]:
     """Manage application lifecycle with type-safe context"""
     # 资源初始化
+    # _metadata_graph = \
+    #     KuzuGraph(settings.get_setting("kuzu.database"))
     _metadata_graph = \
-        KuzuGraph(settings.get_setting("kuzu.database"))
+        AGEGraph(settings.get_setting("age.graph"),
+                 settings.get_setting("age.dsn"))
     yield {'metadata_graph': _metadata_graph}
 
 # Pass lifespan to server
