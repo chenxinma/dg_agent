@@ -28,14 +28,16 @@ from pydantic_ai.messages import (
     FunctionToolResultEvent,
     FunctionToolCallEvent
 )
+import chromadb
+from chromadb.api import ClientAPI
 
 BOT_DIR = Path(__file__).parent.parent
 sys.path.append(str(BOT_DIR))
-# pylint: disable=C0413
-from bot.agent.dg_support import dg_support_agent
-from bot.graph.age_graph import AGEGraph
+
+from bot.agent.dg_support import dg_support_agent, SupportDependencies
 from bot.settings import settings
 
+from bot.graph import BaseGraph, BaseMetadataHelper
 
 # 配置日志
 logfire.configure(environment='local', send_to_logfire=False,)
@@ -50,10 +52,31 @@ usage_limits = UsageLimits(request_limit=10, total_tokens_limit=32768)
 @asynccontextmanager
 async def lifespan(_app: fastapi.FastAPI):
     """资源初始化"""
-    _metadata_graph = \
-        AGEGraph(graph_name=settings.get_setting("age.graph"),
-                dsn=settings.get_setting("age.dsn"))
-    yield {'metadata_graph': _metadata_graph}
+    graph = settings.get_setting("current_graph")
+    if graph == "kuzu":
+        from bot.graph.kuzu_graph import KuzuGraph
+        from bot.graph.ontology.kuzu import MetadataHelper
+
+        _metadata_graph = \
+            KuzuGraph(db_path=settings.get_setting("kuzu.database"))
+        _metadata_helper = MetadataHelper()
+    elif graph == "age":
+        from bot.graph.age_graph import AGEGraph
+        from bot.graph.ontology.age import MetadataHelper
+
+        _metadata_graph = \
+            AGEGraph(graph_name=settings.get_setting("age.graph"),
+                    dsn=settings.get_setting("age.dsn"))
+        _metadata_helper = MetadataHelper()
+    else:
+        raise ValueError(f"Unsupported graph: {graph}")
+    
+    _chroma_client = chromadb.PersistentClient(
+        path=settings.get_setting("chromadb.persist_directory"))
+
+    yield {'metadata_graph': _metadata_graph, 
+           'metadata_helper': _metadata_helper,
+           'chroma_client': _chroma_client}
 
 app = fastapi.FastAPI(lifespan=lifespan)
 logfire.instrument_fastapi(app)
@@ -118,14 +141,24 @@ def to_chat_message(m: ModelMessage) -> ChatMessage:
     raise UnexpectedModelBehavior(f'Unexpected message type for chat app: {m}')
 
 
-async def get_graph(request: Request) -> AGEGraph:
+async def get_graph(request: Request) -> BaseGraph:
     """get the metadata graph"""
     return request.state.metadata_graph
+
+async def get_metadata_helper(request: Request) -> BaseMetadataHelper:
+    """get the metadata helper"""
+    return request.state.metadata_helper
+
+async def get_chroma_client(request: Request) -> ClientAPI:
+    """get the chroma client"""
+    return request.state.chroma_client
 
 @app.post('/chat/')
 async def post_chat(
     prompt: Annotated[str, fastapi.Form()],
-    metadata_graph: AGEGraph = Depends(get_graph)
+    metadata_graph: BaseGraph = Depends(get_graph),
+    metadata_helper: BaseMetadataHelper = Depends(get_metadata_helper),
+    chroma_client: ClientAPI = Depends(get_chroma_client)
 ) -> StreamingResponse:
     """post_chat"""
 
@@ -144,9 +177,24 @@ async def post_chat(
             + b'\n'
         )
         try:
+            collection = chroma_client.get_collection(name=settings.get_setting("chromadb.collection_name"))
+            relevant = collection.query(
+                query_texts=[prompt],
+                n_results=3,
+                include=['documents'], # pyright: ignore[reportArgumentType]
+            )
+            relevant_text = ''
+            if relevant is not None and 'documents' in relevant and relevant["documents"]:
+                relevant_text = "[Cypher参考 Start]" + \
+                            '\n'.join(relevant["documents"][0]) + \
+                            "[Cypher参考 End]\n"
+
+                logfire.info("relevant_text: {rt}", rt=relevant_text)
             # SupportResponse
-            async with dg_support_agent.iter(prompt,
-                                            deps=metadata_graph,
+            async with dg_support_agent.iter(relevant_text + "# 问题：" + prompt,
+                                            deps=SupportDependencies(
+                                                    graph=metadata_graph,
+                                                    metadata_helper=metadata_helper),
                                             usage_limits=usage_limits) as run:
                 output_messages: list[str] = []
                 _timestamp = datetime.now(tz=timezone.utc).isoformat()

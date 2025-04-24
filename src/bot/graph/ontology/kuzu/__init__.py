@@ -12,7 +12,7 @@ from .RelatedTo import RelatedTo
 from .. import MetaObject
 from .ExampleCypher import EXAMPLES
 
-from bot.graph.kuzu_graph import KuzuGraph
+from bot.graph.base_graph import BaseGraph, BaseMetadataHelper
 
 class Others(MetaObject):
     @classmethod
@@ -41,8 +41,8 @@ def _age_obj_key(_, c:Any, _g:Any) -> int:
 
 meta_obj_cache = TTLCache(maxsize=200, ttl=3000)
 
-class MetadataHelper:
-    def _load_columns(self, table:PhysicalTable, graph:KuzuGraph):
+class MetadataHelper(BaseMetadataHelper):
+    def _load_columns(self, table:PhysicalTable, graph:BaseGraph):
         """加载物理表的列信息
         """
         cypher = f"""
@@ -52,7 +52,7 @@ class MetadataHelper:
         table.columns.extend([Column.parse(c['c']) for c in columns])
     
     @cachedmethod(lambda _: meta_obj_cache, key=_age_obj_key)
-    def _parse_kuzu2model(self, c:Any, graph:KuzuGraph):
+    def _parse_kuzu2model(self, c:Any, graph:BaseGraph):
         """将kuzu数据库类型转换为元模型对象
         
         Args:
@@ -69,7 +69,7 @@ class MetadataHelper:
     def _traverse_age_result(self,
                              contents,
                              metaobj_list:list,
-                             graph:KuzuGraph):
+                             graph:BaseGraph):
         """遍历kuzu查询结果提取元模型对象
         
         Args:
@@ -95,7 +95,7 @@ class MetadataHelper:
                     _row.append(d)
             metaobj_list.append(_row)
     
-    def query(self, cypher:str, graph:KuzuGraph)-> list:
+    def query(self, cypher:str, graph:BaseGraph)-> list:
         """按照Cypher脚本进行AGE元数据查询
     
         Args:

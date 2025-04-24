@@ -1,4 +1,5 @@
 """MCP Server"""
+import os
 import sys
 from pathlib import Path
 
@@ -10,6 +11,10 @@ import mcp
 from mcp import types
 from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
+
+from mcp.server.sse import SseServerTransport 
+from starlette.applications import Starlette 
+from starlette.routing import Mount, Route
 
 MCP_DIR = Path(__file__).parent.parent
 sys.path.append(str(MCP_DIR))
@@ -44,6 +49,7 @@ async def app_lifespan(_server: Server) -> AsyncIterator[Dict[str, AGEGraph]]:
     yield {'metadata_graph': _metadata_graph}
 
 # Pass lifespan to server
+sse = SseServerTransport("/messages/")
 server = Server("data_governance", lifespan=app_lifespan)
 metadata_helper : MetadataHelper = MetadataHelper()
 
@@ -112,22 +118,28 @@ def cypher_query(query: CypherQuery) -> DataGovResponse:
 
     return result
 
-async def run():
-    """Execute the server"""
-    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream): # pyright: ignore[reportAttributeAccessIssue]
+async def handle_sse(request):
+    # 定义异步函数handle_sse，处理SSE请求
+    # 参数: request - HTTP请求对象
+    
+    async with sse.connect_sse(
+        request.scope, request.receive, request._send
+    ) as streams:
+        # 建立SSE连接，获取输入输出流
         await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="data_governance",
-                server_version="0.1.0",
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
-                ),
-            ),
-        )
+            streams[0], streams[1], server.create_initialization_options()
+        )  # 运行MCP应用，处理SSE连接
+
+starlette_app = Starlette(
+    debug=True,  # 启用调试模式
+    routes=[
+        Route("/sse", endpoint=handle_sse),  # 设置/sse路由，处理函数为handle_sse
+        Mount("/messages/", app=sse.handle_post_message),  # 挂载/messages/路径，处理POST消息
+    ],
+)  # 创建Starlette应用实例，配置路由
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(run())
+    import uvicorn  # 导入uvicorn ASGI服务器
+    mcp_host = os.environ.get("MCP_HOST", "127.0.0.1")
+    mcp_port = int(os.environ.get("MCP_PORT", "8001"))
+    uvicorn.run(starlette_app, host=mcp_host, port=mcp_port)  # 运行Starlette应用，监听默认127.0.0.1和指定端口8001

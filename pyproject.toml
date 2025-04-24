@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
     "age",
     "cachetools>=5.5.2",
+    "chromadb>=0.6.3",
     "fastapi>=0.115.11",
     "kuzu>=0.8.2",
     "logfire[fastapi]>=3.8.1",
@@ -34,6 +35,7 @@ ignore_no_config=true
 
 [tool.uv.sources]
 age = { path = "./drivers/age-1.0.0-py3-none-any.whl" }
+
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -12,6 +12,12 @@ class BaseGraph(ABC):
         "bool": "BOOLEAN",
     }
 
+    @property
+    @abstractmethod
+    def schema(self) -> str:
+        """获取schema"""
+        ...
+
     @abstractmethod
     def query(self, query: str, params: Sequence | Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
         """执行查询"""
@@ -32,3 +38,8 @@ class BaseGraph(ABC):
         triple_schema = [triple_template.format(**triple) for triple in triples]
         return triple_schema
 
+class BaseMetadataHelper(ABC):
+    @abstractmethod
+    def query(self, cypher:str, graph:BaseGraph)-> list:
+        """执行查询"""
+        pass
