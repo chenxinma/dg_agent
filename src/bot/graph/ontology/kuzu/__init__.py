@@ -10,7 +10,6 @@ from .FlowsTo import FlowsTo
 from .PhysicalTable import PhysicalTable
 from .RelatedTo import RelatedTo
 from .. import MetaObject
-from .ExampleCypher import EXAMPLES
 
 from bot.graph.base_graph import BaseGraph, BaseMetadataHelper
 

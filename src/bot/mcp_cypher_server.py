@@ -23,8 +23,8 @@ try:
     from bot.agent import DataGovResponse, CypherQuery
     from bot.graph.age_graph import AGEGraph
     # from bot.graph.kuzu_graph import KuzuGraph
-    from bot.graph.ontology.age import MetadataHelper, EXAMPLES as _EXAMPLES
-    # from bot.graph.ontology.kuzu import MetadataHelper, EXAMPLES as _EXAMPLES
+    from bot.graph.ontology.age import MetadataHelper
+    # from bot.graph.ontology.kuzu import MetadataHelper
     from bot.settings import Settings
 finally:
     pass
@@ -70,7 +70,6 @@ async def list_tools() -> list[types.Tool]:
 f"""业务域、应用、数据实体、物理表、业务术语信息查询工具。
 注意：对name属性的查询例如数据实体名、应用名、业务域名等，不要翻译。
 {_graph.schema}
-{_EXAMPLES}
 """,
             inputSchema={
                 "type": "object",
