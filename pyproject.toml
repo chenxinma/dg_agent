@@ -5,22 +5,32 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "addict>=2.4.0",
     "age",
     "cachetools>=5.5.2",
+    "chromadb>=0.6.3",
+    "datasets==2.16.0",
     "fastapi>=0.115.11",
     "kuzu>=0.8.2",
     "logfire[fastapi]>=3.8.1",
     "lxml>=5.3.1",
     "mcp[cli]>=1.4.1",
+    "modelscope>=1.25.0",
     "openpyxl>=3.1.5",
     "opentelemetry-api==1.28.0",
     "opentelemetry-exporter-otlp>=1.28.0",
     "opentelemetry-sdk>=1.28.0",
     "pandas>=2.2.3",
+    "pillow>=11.2.1",
     "psycopg2-binary>=2.9.10",
     "pydantic-ai==0.0.42",
     "python-multipart>=0.0.20",
+    "setuptools>=79.0.1",
+    "simplejson>=3.20.1",
+    "sortedcontainers>=2.4.0",
     "sqlparse>=0.5.3",
+    "torch>=2.7.0",
+    "transformers>=4.51.3",
     "uvicorn>=0.34.0",
 ]
 
@@ -34,6 +44,7 @@ ignore_no_config=true
 
 [tool.uv.sources]
 age = { path = "./drivers/age-1.0.0-py3-none-any.whl" }
+
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

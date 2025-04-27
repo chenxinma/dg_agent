@@ -1,4 +1,5 @@
 """MCP Server"""
+import os
 import sys
 from pathlib import Path
 
@@ -11,14 +12,19 @@ from mcp import types
 from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 
+from mcp.server.sse import SseServerTransport 
+from starlette.applications import Starlette 
+from starlette.routing import Mount, Route
+
 MCP_DIR = Path(__file__).parent.parent
 sys.path.append(str(MCP_DIR))
 
 try:
     from bot.agent import DataGovResponse, CypherQuery
-    # from bot.graph.age_graph import AGEGraph
-    from bot.graph.kuzu_graph import KuzuGraph
-    from bot.graph.ontology.kuzu import MetadataHelper, EXAMPLES as _EXAMPLES
+    from bot.graph.age_graph import AGEGraph
+    # from bot.graph.kuzu_graph import KuzuGraph
+    from bot.graph.ontology.age import MetadataHelper
+    # from bot.graph.ontology.kuzu import MetadataHelper
     from bot.settings import Settings
 finally:
     pass
@@ -32,14 +38,18 @@ class MCPRetry(Exception):
     """Retry exception"""
 
 @asynccontextmanager
-async def app_lifespan(_server: Server) -> AsyncIterator[Dict[str, KuzuGraph]]:
+async def app_lifespan(_server: Server) -> AsyncIterator[Dict[str, AGEGraph]]:
     """Manage application lifecycle with type-safe context"""
     # 资源初始化
+    # _metadata_graph = \
+    #     KuzuGraph(settings.get_setting("kuzu.database"))
     _metadata_graph = \
-        KuzuGraph(settings.get_setting("kuzu.database"))
+        AGEGraph(settings.get_setting("age.graph"),
+                 settings.get_setting("age.dsn"))
     yield {'metadata_graph': _metadata_graph}
 
 # Pass lifespan to server
+sse = SseServerTransport("/messages/")
 server = Server("data_governance", lifespan=app_lifespan)
 metadata_helper : MetadataHelper = MetadataHelper()
 
@@ -60,7 +70,6 @@ async def list_tools() -> list[types.Tool]:
 f"""业务域、应用、数据实体、物理表、业务术语信息查询工具。
 注意：对name属性的查询例如数据实体名、应用名、业务域名等，不要翻译。
 {_graph.schema}
-{_EXAMPLES}
 """,
             inputSchema={
                 "type": "object",
@@ -108,22 +117,28 @@ def cypher_query(query: CypherQuery) -> DataGovResponse:
 
     return result
 
-async def run():
-    """Execute the server"""
-    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream): # pyright: ignore[reportAttributeAccessIssue]
+async def handle_sse(request):
+    # 定义异步函数handle_sse，处理SSE请求
+    # 参数: request - HTTP请求对象
+    
+    async with sse.connect_sse(
+        request.scope, request.receive, request._send
+    ) as streams:
+        # 建立SSE连接，获取输入输出流
         await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="data_governance",
-                server_version="0.1.0",
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
-                ),
-            ),
-        )
+            streams[0], streams[1], server.create_initialization_options()
+        )  # 运行MCP应用，处理SSE连接
+
+starlette_app = Starlette(
+    debug=True,  # 启用调试模式
+    routes=[
+        Route("/sse", endpoint=handle_sse),  # 设置/sse路由，处理函数为handle_sse
+        Mount("/messages/", app=sse.handle_post_message),  # 挂载/messages/路径，处理POST消息
+    ],
+)  # 创建Starlette应用实例，配置路由
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(run())
+    import uvicorn  # 导入uvicorn ASGI服务器
+    mcp_host = os.environ.get("MCP_HOST", "127.0.0.1")
+    mcp_port = int(os.environ.get("MCP_PORT", "8001"))
+    uvicorn.run(starlette_app, host=mcp_host, port=mcp_port)  # 运行Starlette应用，监听默认127.0.0.1和指定端口8001

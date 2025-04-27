@@ -4,15 +4,10 @@ KuzuGraph class.
 """
 from __future__ import annotations
 
-import re
-from typing import Dict, List, Tuple, Union, Sequence, Any
+from typing import Dict, List, Any
 
-from age.builder import DFA
 import kuzu
-import logfire
-
 from .base_graph import BaseGraph
-
 
 class KuzuQueryException(Exception):
     """Exception for the Kuzu queries."""
@@ -50,8 +45,9 @@ class KuzuGraph(BaseGraph):
 
     def __init__(self, db_path: str) -> None:
         self.db_path: str = db_path
-        self.db = kuzu.Database(db_path)
+        self.db = kuzu.Database(db_path, read_only=True)
         self.conn = kuzu.Connection(self.db)
+        self._schema:str = ""
         self.refresh_schema()
 
     def explain(self, query: str, params: Dict[str, Any] | None = None):
@@ -145,9 +141,14 @@ class KuzuGraph(BaseGraph):
                 current_table_schema["properties"].append((prop_name, prop_type))
             rel_properties.append(current_table_schema)
 
-        self.schema = (
+        self._schema = (
             "## 图数据库结构:\n"
             f"节点：{node_properties}\n"
             f"关联: {rel_properties}\n"
             f"节点关联关系: {relationships}\n"
         )
+    
+    @property
+    def schema(self) -> str:
+        """Returns the schema of the Graph"""
+        return self._schema

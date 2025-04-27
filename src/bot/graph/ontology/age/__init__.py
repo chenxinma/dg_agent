@@ -35,7 +35,7 @@ _meta_factories:dict[str, type] = {
 
 def _age_obj_key(_, c:Any, _g:Any) -> int:
     if isinstance(c, dict):
-        return hash(f"{c['_label']}:{c['_id']['offset']}:{c['_id']['table']}")
+        return hash(f"{c['label']}:{c['id']}")
     return hash(c)
 
 meta_obj_cache = TTLCache(maxsize=200, ttl=3000)
@@ -45,13 +45,13 @@ class MetadataHelper(BaseMetadataHelper):
         """加载物理表的列信息
         """
         cypher = f"""
-            MATCH (t:PhysicalTable {{full_table_name: '{table.full_table_name}'}})-[:HAS_COLUMN]->(c:`Column`) 
+            MATCH (t:PhysicalTable {{full_table_name: '{table.full_table_name}'}})-[:HAS_COLUMN]->(c:Column) 
             RETURN c"""
         columns = graph.query(cypher)
         table.columns.extend([Column.parse(c['c']) for c in columns])
     
     @cachedmethod(lambda _: meta_obj_cache, key=_age_obj_key)
-    def _parse_kuzu2model(self, c:Any, graph:BaseGraph):
+    def _parse_age2model(self, c:Any, graph:BaseGraph):
         """将kuzu数据库类型转换为元模型对象
         
         Args:
@@ -59,11 +59,14 @@ class MetadataHelper(BaseMetadataHelper):
         Returns:
             Any: 转换后的元模型对象
         """
-        cls = _meta_factories.get(c['_label'], Others)
-        obj = cls.parse(c)
-        if cls is PhysicalTable:
-            self._load_columns(obj, graph)
-        return obj
+        if isinstance(c, dict):
+            cls = _meta_factories.get(c['label'], Others)
+            obj = cls.parse(c)
+            if cls is PhysicalTable:
+                self._load_columns(obj, graph)
+            return obj
+        else:
+            return c
 
     def _traverse_age_result(self,
                              contents,
@@ -76,23 +79,16 @@ class MetadataHelper(BaseMetadataHelper):
             resp: DataGovResponse对象，用于存储转换后的元模型对象
         """
         for row in contents:
-            _row = []
-            for cell in row.values():
-                if not isinstance(cell, dict):
-                    _row.append(cell)
-                    continue
-                if '_nodes' in cell:
-                    for _r in cell['_nodes']:
-                        d = self._parse_kuzu2model(_r, graph)
-                        _row.append(d)
-                if '_rels' in cell:
-                    for _r in cell['_rels']:
-                        d = self._parse_kuzu2model(_r, graph)
-                        _row.append(d)
-                elif '_label' in cell:
-                    d = self._parse_kuzu2model(cell, graph)
-                    _row.append(d)
-            metaobj_list.append(_row)
+             _row = []
+             for cell in row.values():
+                 if isinstance(cell, list):
+                     for _c in cell:
+                         d = self._parse_age2model(_c, graph)
+                         _row.append(d)
+                 else:
+                     d = self._parse_age2model(cell, graph)
+                     _row.append(d)
+             metaobj_list.append(_row)
     
     def query(self, cypher:str, graph:BaseGraph)-> list:
         """按照Cypher脚本进行AGE元数据查询

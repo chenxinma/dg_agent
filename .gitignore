@@ -5,10 +5,13 @@
 settings.yaml
 **/__pycache__
 **/*.egg-info
+.env
 
 build
 dist
 src/make_graph/files/*
+
+chroma_db/*
 
 sql_lab.py
 

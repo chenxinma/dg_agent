@@ -6,6 +6,7 @@
 """
 from __future__ import annotations as _annotations
 
+from dataclasses import dataclass
 from typing import Union
 from typing_extensions import TypeAlias
 from pydantic_ai import Agent, RunContext, ModelRetry
@@ -17,19 +18,22 @@ try:
     from . import SQLResponse, DataGovResponse, AgentFactory, CypherQuery, InvalidRequest
 finally:
     pass
-# from bot.graph.age_graph import AGEGraph
-from bot.graph import KuzuGraph
-from bot.graph.ontology.kuzu import MetadataHelper, EXAMPLES as _EXAMPLES
+
+from bot.graph import BaseGraph, BaseMetadataHelper
 from bot.settings import settings
 
 SupportResponse: TypeAlias = Union[InvalidRequest, SQLResponse, DataGovResponse]
 
-metadata_helper = MetadataHelper()
+@dataclass
+class SupportDependencies:
+    """数据治理知识支持Agent依赖项"""
+    graph: BaseGraph
+    metadata_helper: BaseMetadataHelper
 
 class DataGovSupportAgentFactory(AgentFactory):
     """数据治理知识支持Agent"""
     @staticmethod
-    def get_agent() -> Agent[KuzuGraph, str]:
+    def get_agent() -> Agent[SupportDependencies, str]:
         """获取数据治理知识支持Agent"""
 
         def _wrap_cypher(cypher: str) -> str:
@@ -38,14 +42,15 @@ class DataGovSupportAgentFactory(AgentFactory):
                 c = c[:-1]
             return c
 
-        def cypher_query(ctx: RunContext[KuzuGraph], query: CypherQuery) -> DataGovResponse:
+        def cypher_query(ctx: RunContext[SupportDependencies], query: CypherQuery) -> DataGovResponse:
             """Graph query executor
             
             Args:
                 ctx: The agent context.
                 query: cypher and explanation from agent to execute
             """
-            _graph = ctx.deps
+            _graph = ctx.deps.graph
+            _metadata_helper = ctx.deps.metadata_helper
             # vaildate cypher
             with logfire.span("Validate query"):
                 if not query.cypher.upper().startswith('MATCH'):
@@ -54,7 +59,7 @@ class DataGovSupportAgentFactory(AgentFactory):
             with logfire.span("Execute query"):
                 try:
                     _wraped_cypher = _wrap_cypher(query.cypher)
-                    contents = metadata_helper.query(_wraped_cypher, _graph)
+                    contents = _metadata_helper.query(_wraped_cypher, _graph)
                 except Exception as e:
                     logfire.warn('错误查询: {e}', e=e)
                     logfire.warn('Cypher {q}', q=query.cypher)
@@ -79,20 +84,19 @@ class DataGovSupportAgentFactory(AgentFactory):
 
             return SQLResponse(sql=_wrap_sql)
 
-        def get_graph_schema(ctx: RunContext[KuzuGraph]) -> str:
-            return ctx.deps.schema + \
-                  "\n" + _EXAMPLES
+        def get_graph_schema(ctx: RunContext[SupportDependencies]) -> str:
+            return ctx.deps.graph.schema
 
         model_name = settings.get_setting("agents.plan_agent.model_name")
         api_key = settings.get_setting("agents.plan_agent.api_key")
         agent = Agent(
             models.infer_model(model_name, api_key=api_key), # pyright: ignore[reportArgumentType]
             model_settings={'temperature': 0.0},
-            deps_type=KuzuGraph,
+            deps_type=SupportDependencies,
             result_type=str,
             system_prompt=(
                 "你是一个数据治理知识支持助手。"
-                "你可以根据下面给定的图数据架构生成Cyher查询语句。"
+                "你可以根据下面给定的图数据架构生成Cypher查询语句。"
                 "+ 你会被问及关于这个图数据中关于业务域、应用、数据实体、物理表和数据实体间的关联（RELATE_TO）相关问题，" +
                 " 此时可以通过使用'cypher_query'工具执行Cypher获得结果直接反馈。",
                 "+ 你会被问数据统计查询相关的问题，可以通过'cypher_query'工具获得物理表的定义(获得的物理表内包含表名、列信息，不需要额外获取)，然后根据物理表定义来编写SQL查询，" +

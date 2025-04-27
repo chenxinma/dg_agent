@@ -1,14 +1,5 @@
 """物理模型导入图数据库
 """
-from pandas.core.frame import DataFrame
-
-
-from pandas.core.series import Series
-
-
-from typing import Any
-
-
 from pathlib import Path
 import os
 import pandas as pd
@@ -17,7 +8,7 @@ from . import generate_unique_id
 
 SCRIPT_PAHT = Path(__file__).parent
 
-class MetadataSturture:
+class MetadataStructure:
     """构建元模型 物理表、列"""
 
     def __init__(self, df_entities:pd.DataFrame, df_columns:pd.DataFrame):
@@ -63,7 +54,7 @@ class MetadataSturture:
         implements_df = pd.DataFrame(implements)
         implements_df.to_csv(os.path.join(output_dir, "e_IMPLEMENTS.csv"), index=False)
 
-        has_columns_df: DataFrame = pd.DataFrame(columns_df[["physicaltable_nid", "nid"]].copy())
+        has_columns_df: pd.DataFrame = pd.DataFrame(columns_df[["physicaltable_nid", "nid"]].copy())
         has_columns_df.rename(columns={
                                         "physicaltable_nid": "from_PhysicalTable",
                                         "nid": "to_Column"
@@ -94,8 +85,8 @@ def main():
         df_all_entities = pd.concat([df_all_entities, df_entity])
 
     print(f"Save to csv files...")
-    metadata_sturture = MetadataSturture(df_all_entities, df_all_columns)
-    metadata_sturture.save_csv(output_dir=SCRIPT_PAHT / 'files/data')
+    metadata_structure = MetadataStructure(df_all_entities, df_all_columns)
+    metadata_structure.save_csv(output_dir=SCRIPT_PAHT / 'files/data')
 
 if __name__ == '__main__':
     main()

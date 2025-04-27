@@ -538,6 +538,7 @@ class AGEGraph(BaseGraph):
                 edge_properties.append(np)
 
         return edge_properties
+
     def refresh_schema(self) -> None:
         """
         刷新schema
