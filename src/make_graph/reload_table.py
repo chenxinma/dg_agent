@@ -14,7 +14,15 @@ class MetadataStructure:
     def __init__(self, df_entities:pd.DataFrame, df_columns:pd.DataFrame):
         self._df_entities: pd.DataFrame = df_entities
         self._df_columns: pd.DataFrame = df_columns
-
+    
+    @staticmethod
+    def touch_size(dtype:str):
+        """
+        为列添加size字段
+        """
+        if dtype.startswith("varchar"):
+            return int(dtype.split("(")[1].split(")")[0])
+        return 0
 
     def save_csv(self, output_dir):
         """将物理表、列及其关联关系保存到CSV文件中"""
@@ -33,13 +41,13 @@ class MetadataStructure:
             .to_csv(os.path.join(output_dir, "v_PhysicalTable.csv"), index=False)
 
         # 保存列信息
-        columns_df: pd.DataFrame = pd.DataFrame(self._df_columns[["Table", "Column", "Type"]])
+        columns_df: pd.DataFrame = pd.DataFrame(self._df_columns[["Table", "Column", "Type", "size"]]).astype({"size": "int64"})
         columns_df["nid"] = columns_df.apply(lambda x: generate_unique_id(x.Table +"."+ x.Column), axis=1)
         columns_df["physicaltable_nid"] = columns_df["Table"].apply(generate_unique_id)
         columns_df.rename(columns={"Column": "name", "Type": "data_type"}, inplace=True)
         columns_df = pd.DataFrame(columns_df[
             columns_df["Table"].isin(tables_df["schema"] + "." + tables_df["table_name"])])
-        columns_df[["name", "nid", "data_type"]].to_csv(os.path.join(output_dir, "v_Column.csv"), index=False)
+        columns_df[["name", "nid", "data_type", "size"]].to_csv(os.path.join(output_dir, "v_Column.csv"), index=False)
 
         # 保存关联关系
         implements = []

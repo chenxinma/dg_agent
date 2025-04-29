@@ -35,9 +35,8 @@ BOT_DIR = Path(__file__).parent.parent
 sys.path.append(str(BOT_DIR))
 
 from bot.agent.dg_support import dg_support_agent, SupportDependencies
+from bot.agent.ner_agent import ner_agent
 from bot.settings import settings
-
-from bot.models.embedding import GTEEmbeddingFunction
 
 from bot.graph import BaseGraph, BaseMetadataHelper
 
@@ -51,7 +50,6 @@ origins = [
 WEBROOT_DIR = Path(__file__).parent.joinpath('web')
 usage_limits = UsageLimits(request_limit=10, total_tokens_limit=32768)
 
-emb_fn = GTEEmbeddingFunction()
 
 @asynccontextmanager
 async def lifespan(_app: fastapi.FastAPI):
@@ -157,44 +155,17 @@ async def get_chroma_client(request: Request) -> ClientAPI:
     """get the chroma client"""
     return request.state.chroma_client
 
-def wrap_prompt(prompt: str, chroma_client: ClientAPI) -> str:
+async def wrap_prompt(prompt: str, chroma_client: ClientAPI) -> str:
     """Wrap a prompt with the system prompt."""
-    c_cypher = chroma_client.get_collection(
-                name=settings.get_setting("chromadb.cypher_collection"),
-                embedding_function=emb_fn)
-    relevant = c_cypher.query(
-        query_texts=[prompt],
-        n_results=3,
-        include=['documents'], # pyright: ignore[reportArgumentType]
-    )
-    relevant_cypher_text = ''
-    if relevant is not None and 'documents' in relevant and relevant["documents"]:
-        relevant_cypher_text = '\n'.join(relevant["documents"][0])
 
-        logfire.info("relevant_cypher_text: {rt}", rt=relevant_cypher_text)
+    result = await ner_agent.run(prompt,
+                deps=chroma_client)
+    relevant = str(result.data)
     
-    c_names = chroma_client.get_collection(
-                name=settings.get_setting("chromadb.names_collection"),
-                embedding_function=emb_fn)
-    relevant_names = c_names.query(
-        query_texts=[prompt],
-        n_results=10,
-        include=['documents'], # pyright: ignore[reportArgumentType]
-    )
-    relevant_names_text = ''
-    if relevant_names is not None and 'documents' in relevant_names and relevant_names["documents"]:
-        relevant_names_text = '\n'.join(relevant_names["documents"][0])
-
-        logfire.info("relevant_names_text: {rt}", rt=relevant_names_text)
-
     result = f"""
-    [Cypher参考 Start]
-    {relevant_cypher_text} 
-    [Cypher参考 End]
-
-    [以下是相关的图数据库节点名称，编制Cypher是以此名称为准 Start]
-    {relevant_names_text}
-    [End]
+    [参考 Start]
+    {relevant} 
+    [参考 End]
 
     # 问题：
     {prompt}
@@ -225,8 +196,9 @@ async def post_chat(
             + b'\n'
         )
         try:
+            wraped_prompt = await wrap_prompt(prompt, chroma_client)
             # SupportResponse
-            async with dg_support_agent.iter(wrap_prompt(prompt, chroma_client),
+            async with dg_support_agent.iter(wraped_prompt,
                                             deps=SupportDependencies(
                                                     graph=metadata_graph,
                                                     metadata_helper=metadata_helper),

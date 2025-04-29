@@ -9,10 +9,15 @@ import os
 import csv
 from pathlib import Path
 import age
+from tqdm import tqdm
 
 from bot.settings import settings
 
 SCRIPT_PAHT = Path(__file__).parent
+
+INT_PROPERTIES = [
+    "size"
+]
 
 def create_node_sql(label:str, params:Sequence[str] | None) -> str:
     """create node sql"""
@@ -21,9 +26,13 @@ def create_node_sql(label:str, params:Sequence[str] | None) -> str:
 
     properties: str = "{"
     mark = ""
-    for i, param in enumerate(params):
-        properties += mark + f"{param}: %s"
-        mark = ", "
+    for _, param in enumerate(params):
+        if param in INT_PROPERTIES:
+            properties += mark + f"{param}: toInteger(%s)"
+            mark = ", "
+        else:
+            properties += mark + f"{param}: %s"
+            mark = ", "
     properties += "}"
 
     sql: str = \
@@ -65,7 +74,7 @@ def import_csv_to_age(directory:str, graph_name:str, dsn:str):
 
     # 先导入节点文件
     node_files = [f for f in csv_files if f.startswith('v_')]
-    for node_file in node_files:
+    for node_file in tqdm(node_files):
         _tmp: str = node_file[2:]
         label: str = _tmp[:-4]
         _conn = graph.connection
@@ -78,13 +87,16 @@ def import_csv_to_age(directory:str, graph_name:str, dsn:str):
                     for row in reader:
                         _vars = [graph_name]
                         _vars.extend(row.values())
+                        for p in INT_PROPERTIES:
+                            if p in row:
+                                row[p] = int(row[p]) if row[p] else 0
                         # 将节点数据插入AGE数据库
                         cursor.execute(sql, _vars)
         graph.commit()
 
     # 后导入边文件
     edge_files = [f for f in csv_files if f.startswith('e_')]
-    for edge_file in edge_files:
+    for edge_file in tqdm(edge_files):
         _tmp2: str = edge_file[2:]
         e_label: str = _tmp2[:-4]
         _conn = graph.connection

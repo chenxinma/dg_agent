@@ -10,7 +10,7 @@ import logfire
 # pylint: disable=E0401
 # from bot.graph.age_graph import AGEGraph
 from bot.graph.kuzu_graph import KuzuGraph
-from bot.agent.dg_support import dg_support_agent, SupportResponse
+from bot.agent.dg_support import dg_support_agent, SupportResponse, SupportDependencies
 from bot.settings import settings
 
 # 配置日志
@@ -26,8 +26,9 @@ class TestDataGovSupportAgent:
 
     async def call_agent(self, question: str) -> SupportResponse:
         """调用agent"""
-
-        result = await dg_support_agent.run(question, deps=self.kuzu_graph)
+        from bot.graph.ontology.kuzu import MetadataHelper
+        result = await dg_support_agent.run(question, 
+            deps=SupportDependencies(graph=self.kuzu_graph, metadata_helper=MetadataHelper()))
         return result.data # pyright: ignore
 
     # @pytest.mark.skip()

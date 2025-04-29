@@ -19,7 +19,14 @@ def to_field_define(fields: list[str]) -> str:
     """
     将字段名转换为kuzu的字段定义
     """
-    fields_set = [f"`{field}` STRING" for field in fields]
+    int_fields = ["size"]
+    # fields_set = [f"`{field}` STRING" for field in fields]
+    fields_set = [ ]
+    for field in fields:
+        if field in int_fields:
+            fields_set.append(f"`{field}` INT64")
+        else:
+            fields_set.append(f"`{field}` STRING")
     fields_set.append("PRIMARY KEY (nid)")
     return ", ".join(fields_set)
 
