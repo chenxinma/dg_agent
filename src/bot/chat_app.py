@@ -223,15 +223,15 @@ async def post_chat(
                             async for event in handle_stream:
                                 if isinstance(event, FunctionToolCallEvent):
                                     output_messages.append(
-                                        f'\n\n [Tools] {event.part.tool_name!r} '+
-                                        f'开始 ID={event.part.tool_call_id!r} \n\n'
+                                        f'\n\n `[Calling] {event.part.tool_name!r} \n'+
+                                        f'{event.part.args!r}`\n\n'
                                     )
                                     m = ModelResponse(parts=[TextPart("".join(output_messages))],
                                                     timestamp=_timestamp)# pyright: ignore[reportArgumentType]
                                     yield json.dumps(to_chat_message(m)).encode('utf-8') + b'\n'
                                 elif isinstance(event, FunctionToolResultEvent):
                                     output_messages.append(
-                                        f'[Tools] ID={event.tool_call_id!r} 完成。\n\n'
+                                        '`[Completed]`\n\n'
                                     )
                                     m = ModelResponse(parts=[TextPart("".join(output_messages))],
                                                     timestamp=_timestamp)# pyright: ignore[reportArgumentType]

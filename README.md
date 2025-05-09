@@ -40,8 +40,22 @@ agents:
   plan_agent:
     model_name: bailian:qwen-max
     api_key: sk-xxxxx
+  ner_agent:
+    model_name: bailian:qwen-max
+    api_key: sk-xxxxx
+# 选择 apache age 作为图数据库
+age:
+  graph: <graph name>
+  dsn: "host=<ip> port=<port> dbname=<db> user=<username> password=<password>"
+# 或 选择 kuzu 作为图数据库
 kuzu:
-  database: db-path
+  database: "<present database path>"
+current_graph: "age" # 选择 age 或 kuzu
+chromadb: # 向量数据库  
+  persist_directory: "<path>"
+  cypher_collection: "cypher_hint" # 参考 cypher
+  names_collection : "name_hint" # 参考标准名称
+  embedding_model : "nlp_gte_sentence-embedding_chinese-base"
 ```
 
 

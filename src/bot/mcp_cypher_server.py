@@ -4,13 +4,12 @@ import sys
 from pathlib import Path
 
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Dict
+from typing import Any, AsyncIterator, Dict
 
+import chromadb
 import logfire
-import mcp
 from mcp import types
-from mcp.server.lowlevel import NotificationOptions, Server
-from mcp.server.models import InitializationOptions
+from mcp.server.lowlevel import Server
 
 from mcp.server.sse import SseServerTransport 
 from starlette.applications import Starlette 
@@ -21,10 +20,7 @@ sys.path.append(str(MCP_DIR))
 
 try:
     from bot.agent import DataGovResponse, CypherQuery
-    from bot.graph.age_graph import AGEGraph
-    # from bot.graph.kuzu_graph import KuzuGraph
-    from bot.graph.ontology.age import MetadataHelper
-    # from bot.graph.ontology.kuzu import MetadataHelper
+    from bot.agent.ner_agent import ner_agent
     from bot.settings import Settings
 finally:
     pass
@@ -38,20 +34,38 @@ class MCPRetry(Exception):
     """Retry exception"""
 
 @asynccontextmanager
-async def app_lifespan(_server: Server) -> AsyncIterator[Dict[str, AGEGraph]]:
+async def app_lifespan(_server: Server) -> AsyncIterator[Dict[str, Any]]:
     """Manage application lifecycle with type-safe context"""
     # 资源初始化
-    # _metadata_graph = \
-    #     KuzuGraph(settings.get_setting("kuzu.database"))
-    _metadata_graph = \
-        AGEGraph(settings.get_setting("age.graph"),
-                 settings.get_setting("age.dsn"))
-    yield {'metadata_graph': _metadata_graph}
+    graph = settings.get_setting("current_graph")
+    if graph == "kuzu":
+        from bot.graph.kuzu_graph import KuzuGraph
+        from bot.graph.ontology.kuzu import MetadataHelper
+
+        _metadata_graph = \
+            KuzuGraph(db_path=settings.get_setting("kuzu.database"))
+        _metadata_helper = MetadataHelper()
+    elif graph == "age":
+        from bot.graph.age_graph import AGEGraph
+        from bot.graph.ontology.age import MetadataHelper
+
+        _metadata_graph = \
+            AGEGraph(graph_name=settings.get_setting("age.graph"),
+                    dsn=settings.get_setting("age.dsn"))
+        _metadata_helper = MetadataHelper()
+    else:
+        raise ValueError(f"Unsupported graph: {graph}")
+    
+    _chroma_client = chromadb.PersistentClient(
+        path=settings.get_setting("chromadb.persist_directory"))
+
+    yield {'metadata_graph': _metadata_graph, 
+           'metadata_helper': _metadata_helper,
+           'chroma_client': _chroma_client}
 
 # Pass lifespan to server
 sse = SseServerTransport("/messages/")
 server = Server("data_governance", lifespan=app_lifespan)
-metadata_helper : MetadataHelper = MetadataHelper()
 
 def _wrap_cypher(cypher: str) -> str:
     c = cypher.replace("\\n", "\n")
@@ -64,6 +78,17 @@ async def list_tools() -> list[types.Tool]:
     """list tools"""
     _graph = server.request_context.lifespan_context["metadata_graph"]
     return [
+        types.Tool(
+            name="dg_relevant",
+            description="使用cypher_query前，先使用该工具查询相关的参考信息。",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string", "description": "问题"},
+                },
+                "required": ["prompt"]
+            }
+        ),
         types.Tool(
             name="cypher_query",
             description=
@@ -89,7 +114,27 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent | type
         resp = cypher_query(CypherQuery(cypher=arguments["cypher"],
                                         explanation=arguments["explanation"]))
         return [types.TextContent(type="text", text=str(resp))]
+    elif name == "dg_relevant":
+        resp = await dg_relevant(arguments["prompt"])
+        return [types.TextContent(type="text", text=resp)]
+
     raise MCPRetry(f"Unknown tool name: {name}")
+
+async def dg_relevant(prompt: str) -> str:
+    """Data governance relevant"""
+    _client = server.request_context.lifespan_context["chroma_client"]
+    result = await ner_agent.run(prompt, deps=_client)
+    relevant = str(result.data)
+    
+    result = f"""
+    [参考 Start]
+    {relevant} 
+    [参考 End]
+
+    # 问题：
+    {prompt}
+    """
+    return result
 
 def cypher_query(query: CypherQuery) -> DataGovResponse:
     """Do cypher query       
@@ -97,6 +142,7 @@ def cypher_query(query: CypherQuery) -> DataGovResponse:
         query: cypher and explanation from agent to execute
     """
     _graph = server.request_context.lifespan_context["metadata_graph"]
+    _metadata_helper = server.request_context.lifespan_context["metadata_helper"]
     # vaildate cypher
 
     if not query.cypher.upper().startswith('MATCH'):
@@ -104,7 +150,7 @@ def cypher_query(query: CypherQuery) -> DataGovResponse:
 
     try:
         _wraped_cypher = _wrap_cypher(query.cypher)
-        contents = metadata_helper.query(_wraped_cypher, _graph)
+        contents = _metadata_helper.query(_wraped_cypher, _graph)
     except Exception as e:
         logfire.warn('错误查询: {e}', e=e)
         logfire.warn('Cypher {q}', q=query.cypher)

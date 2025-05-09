@@ -68,6 +68,12 @@ RETURN e1,r,e2
 MATCH (e1:DataEntity {name: 'EntityName'})-[:FLOWS_TO]-(e2:DataEntity)
 RETURN e2
 -- 替换 EntityName 为目标数据实体的名称。
+""",
+"""查询长度大于 n 的列（字段）
+查询：
+MATCH (c:`Column`)
+WHERE c.size > n
+RETURN c
 """
 ]
 

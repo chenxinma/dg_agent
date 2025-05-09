@@ -82,9 +82,9 @@ class NERAgentFactory(AgentFactory):
                 "2.使用cypher_search工具查询相关Cypher，依据提示文本给出最为相关的Cypher参考。\n"
                 "注意：严格按照以下格式输出：\n"
                 "## 标准名称对照：\n"
-                "- <实体名称1>: <标准名称1>\n"
-                "- <实体名称2>: <标准名称2>\n"
-                "- <实体名称3>: <标准名称4>\n"
+                "- <实体名称1>: (BusinessDomain {name:'<标准名称1>'})\n"
+                "- <实体名称2>: (Application {name:'<标准名称2>'})\n"
+                "- <实体名称3>: (DataEntity {name:'<标准名称3>'})\n"
                 "## Cypher参考建议：\n"
                 "- <Cypher>\n"
             )

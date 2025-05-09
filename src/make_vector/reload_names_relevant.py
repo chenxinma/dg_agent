@@ -51,7 +51,7 @@ def main():
         names = df['name'].tolist()
         nid = df['nid'].tolist()
 
-        docs.extend([ f"{node_name} {{name:{name}}}" for name in names])
+        docs.extend([ f"({node_name} {{name:{name}}})" for name in names])
         ids.extend(nid)
 
     # 连接到ChromaDB
